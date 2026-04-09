@@ -3,7 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+const PLATFORMS = [
+  { id: 'sillobite', name: 'SilloBite', icon: '🍽️' },
+  { id: 'figgy', name: 'Figgy', icon: '🥗' },
+  { id: 'komato', name: 'Komato', icon: '🍅' },
+];
+
 export default function ConnectCard() {
+  const [platform, setPlatform] = useState("sillobite");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -12,6 +19,8 @@ export default function ConnectCard() {
     text: string;
   } | null>(null);
   const router = useRouter();
+
+  const selectedPlatform = PLATFORMS.find(p => p.id === platform);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,12 +34,12 @@ export default function ConnectCard() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/connect-sillobite", {
+      const response = await fetch("/api/connect", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email, code, platform }),
       });
 
       const data = await response.json();
@@ -66,15 +75,41 @@ export default function ConnectCard() {
 
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-2">
-          Connect SilloBite
+          Connect Platform
         </h1>
         <p className="text-gray-600 text-sm">
-          Link your SilloBite account to enable smart food recommendations and
-          ordering
+          Link your account to enable smart food recommendations and ordering
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label
+            htmlFor="platform"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Platform
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {PLATFORMS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPlatform(p.id)}
+                className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 transition ${
+                  platform === p.id
+                    ? "border-emerald-500 bg-emerald-50"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+                disabled={loading}
+              >
+                <span className="text-2xl mb-1">{p.icon}</span>
+                <span className="text-xs font-medium">{p.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div>
           <label
             htmlFor="email"
@@ -141,7 +176,7 @@ export default function ConnectCard() {
               Connecting...
             </>
           ) : (
-            "Connect"
+            <>Connect to {selectedPlatform?.name}</>
           )}
         </button>
       </form>
