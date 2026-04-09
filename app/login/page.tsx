@@ -10,7 +10,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (session) {
-      router.push("/dashboard");
+      router.push("/");
     }
   }, [session, router]);
 
@@ -24,7 +24,7 @@ export default function LoginPage() {
         </div>
 
         <button
-          onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+          onClick={() => signIn("google", { callbackUrl: "/" })}
           className="w-full bg-white border-2 border-gray-300 text-gray-700 font-semibold py-3 px-4 rounded-lg hover:bg-gray-50 transition duration-200 flex items-center justify-center gap-3 shadow-sm"
         >
           <svg className="w-6 h-6" viewBox="0 0 24 24">
