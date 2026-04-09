@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 
 const fitnessGoals = [
   {
@@ -44,7 +45,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     age: "",
     height: "",
@@ -101,8 +102,9 @@ export default function OnboardingPage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Welcome to CareBite! 🍽️
+          <h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-3">
+            Welcome to CareBite!
+            <Image src="/logo.svg" alt="CareBite" width={40} height={40} className="w-10 h-10 rounded-full" />
           </h1>
           <p className="text-gray-600">
             Let's personalize your nutrition journey
@@ -129,7 +131,7 @@ export default function OnboardingPage() {
             <h2 className="text-2xl font-bold text-gray-800 mb-6">
               Tell us about yourself
             </h2>
-            
+
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -198,11 +200,10 @@ export default function OnboardingPage() {
                 <button
                   key={goal.id}
                   onClick={() => setFormData({ ...formData, fitnessGoal: goal.id })}
-                  className={`p-6 border-2 rounded-lg text-left transition-all ${
-                    formData.fitnessGoal === goal.id
-                      ? "border-emerald-500 bg-emerald-50"
-                      : "border-gray-200 hover:border-emerald-300"
-                  }`}
+                  className={`p-6 border-2 rounded-lg text-left transition-all ${formData.fitnessGoal === goal.id
+                    ? "border-emerald-500 bg-emerald-50"
+                    : "border-gray-200 hover:border-emerald-300"
+                    }`}
                 >
                   <div className="text-4xl mb-3">{goal.icon}</div>
                   <h3 className="font-semibold text-lg mb-2">{goal.title}</h3>
@@ -244,11 +245,10 @@ export default function OnboardingPage() {
                 <button
                   key={activity.id}
                   onClick={() => setFormData({ ...formData, activityType: activity.id })}
-                  className={`p-6 border-2 rounded-lg text-center transition-all ${
-                    formData.activityType === activity.id
-                      ? "border-emerald-500 bg-emerald-50"
-                      : "border-gray-200 hover:border-emerald-300"
-                  }`}
+                  className={`p-6 border-2 rounded-lg text-center transition-all ${formData.activityType === activity.id
+                    ? "border-emerald-500 bg-emerald-50"
+                    : "border-gray-200 hover:border-emerald-300"
+                    }`}
                 >
                   <div className="text-4xl mb-2">{activity.icon}</div>
                   <h3 className="font-medium text-sm">{activity.title}</h3>

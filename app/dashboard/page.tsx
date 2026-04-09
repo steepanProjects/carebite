@@ -2,11 +2,13 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import Image from "next/image";
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -27,29 +29,61 @@ export default function DashboardPage() {
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">🍽️</span>
+            <Image src="/logo.svg" alt="CareBite" width={32} height={32} className="w-8 h-8 rounded-full" />
             <h1 className="text-xl font-bold text-gray-800">CareBite</h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="relative">
             <button
-              onClick={() => router.push("/profile")}
-              className="flex items-center gap-2 text-gray-700 hover:text-emerald-600 transition-colors"
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             >
-              {session?.user?.image && (
+              {session?.user?.image ? (
                 <img
                   src={session.user.image}
                   alt={session.user.name || "User"}
-                  className="w-8 h-8 rounded-full"
+                  className="w-10 h-10 rounded-full border-2 border-emerald-500"
                 />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white font-semibold">
+                  {session?.user?.name?.[0]?.toUpperCase() || "U"}
+                </div>
               )}
-              <span className="text-sm font-medium">Profile</span>
             </button>
-            <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              className="text-sm text-gray-600 hover:text-gray-800"
-            >
-              Sign Out
-            </button>
+
+            {dropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setDropdownOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-20">
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      router.push("/profile");
+                    }}
+                    className="w-full px-4 py-2 text-left text-gray-700 hover:bg-emerald-50 hover:text-emerald-600 transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Profile
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      signOut({ callbackUrl: "/login" });
+                    }}
+                    className="w-full px-4 py-2 text-left text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    Sign Out
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
