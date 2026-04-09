@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { verifyCode } from "@/lib/sillobite";
+import { verifyCode } from "@/lib/platforms";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await verifyCode(email, code);
+    const result = await verifyCode('sillobite', email, code);
 
     if (!result.success) {
       return NextResponse.json(
@@ -33,15 +33,21 @@ export async function POST(request: NextRequest) {
 
       if (user) {
         await prisma.userIntegration.upsert({
-          where: { userId: user.id },
+          where: { 
+            userId_platform: {
+              userId: user.id,
+              platform: 'sillobite'
+            }
+          },
           update: {
-            sillobiteUserId: String(result.user_id!),
+            platformUserId: String(result.user_id!),
             accessToken: result.access_token!,
             connectedAt: new Date(),
           },
           create: {
             userId: user.id,
-            sillobiteUserId: String(result.user_id!),
+            platform: 'sillobite',
+            platformUserId: String(result.user_id!),
             accessToken: result.access_token!,
           },
         });
