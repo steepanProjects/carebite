@@ -12,15 +12,29 @@ export default function SplashScreen() {
   useEffect(() => {
     if (status === "loading") return;
 
-    const timer = setTimeout(() => {
+    const checkProfile = async () => {
       if (session) {
-        router.push("/dashboard");
+        // Check if user has completed onboarding
+        try {
+          const response = await fetch("/api/profile");
+          const data = await response.json();
+          
+          if (data.profile) {
+            router.push("/dashboard");
+          } else {
+            router.push("/onboarding");
+          }
+        } catch (error) {
+          console.error("Error checking profile:", error);
+          router.push("/onboarding");
+        }
       } else {
         router.push("/login");
       }
       setIsChecking(false);
-    }, 2000);
+    };
 
+    const timer = setTimeout(checkProfile, 2000);
     return () => clearTimeout(timer);
   }, [session, status, router]);
 
