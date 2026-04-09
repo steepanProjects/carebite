@@ -42,6 +42,23 @@ model User {
   image         String?
   accounts      Account[]
   sessions      Session[]
+  profile       UserProfile?
+}
+
+model UserProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  age               Int?
+  height            Float?   // in cm
+  weight            Float?   // in kg
+  fitnessGoal       String?  // weight_loss, muscle_gain, endurance, general_fitness
+  activityType      String?  // gym, cycling, running, marathon, general
+  goalDescription   String?
+  medicalCondition  String?  // User's medical conditions or health concerns
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {
