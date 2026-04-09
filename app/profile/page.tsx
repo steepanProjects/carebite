@@ -40,6 +40,8 @@ export default function ProfilePage() {
     connected: boolean;
     connectedAt?: string;
   } | null>(null);
+  const [fetchingMenu, setFetchingMenu] = useState(false);
+  const [menuData, setMenuData] = useState<any>(null);
   const [formData, setFormData] = useState({
     age: "",
     height: "",
@@ -56,6 +58,7 @@ export default function ProfilePage() {
     } else if (status === "authenticated") {
       fetchProfile();
       fetchIntegrationStatus();
+      loadMenuFromCache();
     }
   }, [status, router]);
 
@@ -89,6 +92,38 @@ export default function ProfilePage() {
       setIntegration(data);
     } catch (error) {
       console.error("Error fetching integration status:", error);
+    }
+  };
+
+  const loadMenuFromCache = () => {
+    try {
+      const cachedMenu = localStorage.getItem("sillobite_menu");
+      if (cachedMenu) {
+        setMenuData(JSON.parse(cachedMenu));
+      }
+    } catch (error) {
+      console.error("Error loading menu from cache:", error);
+    }
+  };
+
+  const handleFetchMenu = async () => {
+    setFetchingMenu(true);
+    try {
+      const response = await fetch("/api/menu");
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        setMenuData(result.data);
+        localStorage.setItem("sillobite_menu", JSON.stringify(result.data));
+        alert("Menu fetched successfully!");
+      } else {
+        alert(result.message || "Failed to fetch menu");
+      }
+    } catch (error) {
+      console.error("Error fetching menu:", error);
+      alert("Error fetching menu. Please try again.");
+    } finally {
+      setFetchingMenu(false);
     }
   };
 
@@ -290,13 +325,55 @@ export default function ProfilePage() {
                 </p>
               )}
 
-              <button
-                onClick={() => router.push("/connect")}
-                className="w-full bg-emerald-500 text-white py-3 rounded-lg font-medium hover:bg-emerald-600 transition-colors"
-              >
-                {integration?.connected ? "Reconnect SilloBite" : "Connect SilloBite"}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => router.push("/connect")}
+                  className="flex-1 bg-emerald-500 text-white py-3 rounded-lg font-medium hover:bg-emerald-600 transition-colors"
+                >
+                  {integration?.connected ? "Reconnect SilloBite" : "Connect SilloBite"}
+                </button>
+                {integration?.connected && (
+                  <button
+                    onClick={handleFetchMenu}
+                    disabled={fetchingMenu}
+                    className="flex-1 bg-blue-500 text-white py-3 rounded-lg font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {fetchingMenu ? "Fetching..." : "Fetch Menu"}
+                  </button>
+                )}
+              </div>
             </div>
+
+            {menuData && (
+              <div className="bg-white rounded-lg shadow p-6 mt-6">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Menu Data</h3>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2">User Info</h4>
+                    <p className="text-sm text-gray-600">Email: {menuData.user?.email}</p>
+                    <p className="text-sm text-gray-600">Name: {menuData.user?.name}</p>
+                    <p className="text-sm text-gray-600">Location: {menuData.user?.locationType}</p>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2">Canteens</h4>
+                    <p className="text-sm text-gray-600">{menuData.canteens?.length || 0} canteens available</p>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-700 mb-2">Menu Items</h4>
+                    <p className="text-sm text-gray-600">{menuData.menuItems?.length || 0} items available</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem("sillobite_menu");
+                      setMenuData(null);
+                    }}
+                    className="text-sm text-red-600 hover:text-red-700"
+                  >
+                    Clear cached menu
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <>
