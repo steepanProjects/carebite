@@ -59,6 +59,16 @@ model UserProfile {
   updatedAt         DateTime @updatedAt
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integration   UserIntegration?
+}
+
+model UserIntegration {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  sillobiteUserId   String
+  accessToken       String
+  connectedAt       DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {
