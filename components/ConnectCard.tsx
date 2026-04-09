@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function ConnectCard() {
   const [email, setEmail] = useState("");
@@ -10,6 +11,7 @@ export default function ConnectCard() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +39,10 @@ export default function ConnectCard() {
         setMessage({ type: "success", text: "Connected successfully" });
         setEmail("");
         setCode("");
+        
+        setTimeout(() => {
+          router.push("/profile");
+        }, 1500);
       } else {
         setMessage({ type: "error", text: data.message });
       }
@@ -49,6 +55,15 @@ export default function ConnectCard() {
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
+      <div className="flex items-center justify-between mb-6">
+        <button
+          onClick={() => router.back()}
+          className="text-gray-600 hover:text-gray-800 flex items-center gap-1"
+        >
+          <span>←</span> Back
+        </button>
+      </div>
+
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-2">
           Connect SilloBite
