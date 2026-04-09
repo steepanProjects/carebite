@@ -5,15 +5,6 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession();
-
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
     const { email, code } = body;
 
@@ -33,38 +24,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
+    const session = await getServerSession();
 
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: "User not found" },
-        { status: 404 }
-      );
+    if (session?.user?.email) {
+      const user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+      });
+
+      if (user) {
+        await prisma.userIntegration.upsert({
+          where: { userId: user.id },
+          update: {
+            sillobiteUserId: String(result.user_id!),
+            accessToken: result.access_token!,
+            connectedAt: new Date(),
+          },
+          create: {
+            userId: user.id,
+            sillobiteUserId: String(result.user_id!),
+            accessToken: result.access_token!,
+          },
+        });
+      }
     }
-
-    await prisma.userIntegration.upsert({
-      where: { userId: user.id },
-      update: {
-        sillobiteUserId: result.user_id!,
-        accessToken: result.access_token!,
-        connectedAt: new Date(),
-      },
-      create: {
-        userId: user.id,
-        sillobiteUserId: result.user_id!,
-        accessToken: result.access_token!,
-      },
-    });
 
     return NextResponse.json({
       success: true,
       message: "Successfully connected to SilloBite",
+      data: {
+        access_token: result.access_token,
+        user_id: result.user_id,
+      },
     });
   } catch (error) {
+    console.error("Connect SilloBite error:", error);
     return NextResponse.json(
-      { success: false, message: "Internal server error" },
+      { success: false, message: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }
     );
   }
