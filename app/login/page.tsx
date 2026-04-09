@@ -17,19 +17,19 @@ const pageV = {
 const leftV = {
   initial: { scale: 1.1, opacity: 0 },
   animate: { scale: 1, opacity: 1 },
-  transition: { duration: 1.1, ease: [0.25, 0.46, 0.45, 0.94] },
+  transition: { duration: 1.1, ease: [0.25, 0.46, 0.45, 0.94] as const },
 };
 
 const cardV = {
   initial: { opacity: 0, scale: 0.95, y: 30 },
   animate: { opacity: 1, scale: 1, y: 0 },
-  transition: { duration: 0.45, ease: "easeOut", delay: 0.2 },
+  transition: { duration: 0.45, ease: "easeOut" as const, delay: 0.2 },
 };
 
 const logoV = {
   initial: { opacity: 0, scale: 0.72, y: -14 },
   animate: { opacity: 1, scale: 1, y: 0 },
-  transition: { delay: 0.35, duration: 0.5, ease: "easeOut" },
+  transition: { delay: 0.35, duration: 0.5, ease: "easeOut" as const },
 };
 
 const headV = {
@@ -41,7 +41,7 @@ const headV = {
 const divV = {
   initial: { opacity: 0, scaleX: 0.3 },
   animate: { opacity: 1, scaleX: 1 },
-  transition: { delay: 0.55, duration: 0.5, ease: "easeOut" },
+  transition: { delay: 0.55, duration: 0.5, ease: "easeOut" as const },
 };
 
 const btnV = {
@@ -73,7 +73,8 @@ const leftTextWrap = {
 
 const leftLine = {
   initial: { opacity: 0, y: 18 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.55, ease: "easeOut" } },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.55, ease: "easeOut" as const },
 };
 
 // ─── ambient blob ─────────────────────────────────────────────────────────────

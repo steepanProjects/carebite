@@ -18,7 +18,7 @@ const containerV = {
 const logoV = {
   initial: { scale: 0.8, opacity: 0 },
   animate: { scale: 1, opacity: 1 },
-  transition: { duration: 0.6, ease: [0.34, 1.56, 0.64, 1] },
+  transition: { duration: 0.6, ease: [0.34, 1.56, 0.64, 1] as const },
 };
 
 const glowV = {
@@ -29,7 +29,7 @@ const glowV = {
   transition: {
     duration: 2.5,
     repeat: Infinity,
-    ease: "easeInOut",
+    ease: "easeInOut" as const,
   },
 };
 
