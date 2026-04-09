@@ -13,24 +13,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { days, menuItems } = await req.json();
+    const { days } = await req.json();
 
-    if (!days || !menuItems || menuItems.length === 0) {
+    if (!days) {
       return NextResponse.json(
-        { error: "Days and menu items are required" },
-        { status: 400 }
-      );
-    }
-
-    // Extract only dish names from menu items
-    const dishNames = menuItems.map((item: any) => {
-      if (typeof item === 'string') return item;
-      return item.name || item.dishName || item.title || String(item);
-    }).filter(Boolean);
-
-    if (dishNames.length === 0) {
-      return NextResponse.json(
-        { error: "No valid dish names found in menu" },
+        { error: "Number of days is required" },
         { status: 400 }
       );
     }
@@ -57,8 +44,8 @@ export async function POST(req: Request) {
     const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const planDays = Array.from({ length: days }, (_, i) => dayNames[i % 7]);
 
-    // Create simplified prompt for LLM
-    const prompt = `You are a professional nutritionist. Create a ${days}-day personalized diet plan.
+    // Create prompt for LLM focusing on nutritional requirements
+    const prompt = `You are a professional nutritionist. Create a ${days}-day personalized diet plan based on nutritional requirements.
 
 USER PROFILE:
 - Age: ${profile.age} years
@@ -70,52 +57,38 @@ USER PROFILE:
 - Goals: ${profile.goalDescription || "Not specified"}
 - Medical Conditions: ${profile.medicalCondition || "None"}
 
-AVAILABLE DISHES (use ONLY these):
-${dishNames.join(', ')}
-
-IMPORTANT INSTRUCTIONS:
-1. Consider the user's fitness goal:
-   - weight_loss: Lower calories, high protein, moderate carbs
-   - muscle_gain: High protein, high calories, good carbs
-   - endurance: High carbs, moderate protein, sustained energy
-   - general_fitness: Balanced nutrition
+INSTRUCTIONS:
+1. Based on the user's fitness goal, provide nutritional requirements:
+   - weight_loss: Lower calories (1500-1800 cal/day), high protein (100-120g), moderate carbs (150-180g), healthy fats
+   - muscle_gain: Higher calories (2500-3000 cal/day), very high protein (150-180g), high carbs (300-350g), moderate fats
+   - endurance: High calories (2200-2800 cal/day), moderate protein (100-130g), very high carbs (350-400g), moderate fats
+   - general_fitness: Balanced (2000-2200 cal/day), moderate protein (80-100g), balanced carbs (200-250g), healthy fats
 
 2. Consider activity type:
-   - gym: High protein for muscle recovery
-   - cycling/running/marathon: High carbs for energy
-   - general: Balanced meals
+   - gym: Emphasize protein for muscle recovery, post-workout carbs
+   - cycling/running/marathon: Emphasize carbs for sustained energy, adequate protein
+   - general: Balanced macronutrients
 
-3. Respect medical conditions - avoid foods that may conflict
+3. Respect medical conditions - adjust macros accordingly
 
-4. Use ONLY dishes from the available list above
+4. For each meal, provide ONLY the target macronutrients (no food names)
 
-5. Create variety across days
+5. No snacks - only breakfast, lunch, dinner
 
 Return ONLY valid JSON (no markdown, no code blocks):
 {
-  "dietPlan": [
+  "plan": [
     {
+      "d": 1,
       "day": "Monday",
-      "dayNumber": 1,
-      "breakfast": {
-        "time": "8:00 AM",
-        "dishes": ["dish1", "dish2"]
-      },
-      "lunch": {
-        "time": "1:00 PM",
-        "dishes": ["dish1", "dish2"]
-      },
-      "snacks": {
-        "time": "4:00 PM",
-        "dishes": ["dish1"]
-      },
-      "dinner": {
-        "time": "8:00 PM",
-        "dishes": ["dish1", "dish2"]
-      }
+      "b": {"t": "8:00 AM", "cal": 500, "p": 30, "c": 60, "f": 15},
+      "l": {"t": "1:00 PM", "cal": 600, "p": 40, "c": 70, "f": 20},
+      "dn": {"t": "8:00 PM", "cal": 700, "p": 45, "c": 80, "f": 25},
+      "total": 1800
     }
   ],
-  "nutritionalNotes": "Brief explanation of the diet strategy based on user's goals and conditions"
+  "notes": "Brief strategy",
+  "target": {"cal": 1800, "p": 115, "c": 210, "f": 60}
 }
 
 Days to plan: ${planDays.join(', ')}`;
@@ -154,9 +127,12 @@ Days to plan: ${planDays.join(', ')}`;
     }
 
     const data = await response.json();
+    console.log("Groq API response:", data); // Debug log
     const content = data.choices[0]?.message?.content;
+    console.log("AI content:", content); // Debug log
 
     if (!content) {
+      console.error("No content in response");
       return NextResponse.json(
         { error: "No response from AI model" },
         { status: 500 }
@@ -168,11 +144,13 @@ Days to plan: ${planDays.join(', ')}`;
     try {
       // Remove markdown code blocks if present
       const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      console.log("Cleaned content:", cleanContent); // Debug log
       dietPlan = JSON.parse(cleanContent);
+      console.log("Parsed diet plan:", dietPlan); // Debug log
     } catch (parseError) {
       console.error("Failed to parse AI response:", content);
       return NextResponse.json(
-        { error: "Failed to parse diet plan response" },
+        { error: "Failed to parse diet plan response", details: content },
         { status: 500 }
       );
     }

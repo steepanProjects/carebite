@@ -106,7 +106,18 @@ export default function DashboardPage() {
             <div className="text-5xl mb-4">🥗</div>
             <h3 className="text-2xl font-bold text-gray-800 mb-2">Generate Diet Plan</h3>
             <p className="text-gray-600">
-              AI-powered personalized meal planning based on your profile and available menu
+              AI-powered personalized meal planning based on your profile
+            </p>
+          </button>
+
+          <button
+            onClick={() => router.push("/orders")}
+            className="bg-white rounded-lg shadow p-8 hover:shadow-lg transition-shadow text-left"
+          >
+            <div className="text-5xl mb-4">🛒</div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Order Management</h3>
+            <p className="text-gray-600">
+              AI matches your diet plan with available menu items for ordering
             </p>
           </button>
 
