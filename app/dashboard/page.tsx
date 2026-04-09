@@ -89,13 +89,59 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow p-8 text-center">
+        <div className="bg-white rounded-lg shadow p-8 text-center mb-6">
           <h2 className="text-3xl font-bold text-gray-800 mb-4">
             Welcome back, {session?.user?.name}! 👋
           </h2>
           <p className="text-gray-600 text-lg">
             Your personalized health dashboard
           </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <button
+            onClick={() => router.push("/diet-plan")}
+            className="bg-white rounded-lg shadow p-8 hover:shadow-lg transition-shadow text-left"
+          >
+            <div className="text-5xl mb-4">🥗</div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Generate Diet Plan</h3>
+            <p className="text-gray-600">
+              AI-powered personalized meal planning based on your profile
+            </p>
+          </button>
+
+          <button
+            onClick={() => router.push("/orders")}
+            className="bg-white rounded-lg shadow p-8 hover:shadow-lg transition-shadow text-left"
+          >
+            <div className="text-5xl mb-4">🛒</div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Order Management</h3>
+            <p className="text-gray-600">
+              Manually match and order meals from your diet plan
+            </p>
+          </button>
+
+          <button
+            onClick={() => router.push("/auto-orders")}
+            className="bg-white rounded-lg shadow p-8 hover:shadow-lg transition-shadow text-left border-2 border-emerald-500"
+          >
+            <div className="text-5xl mb-4">🤖</div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Automated Ordering</h3>
+            <p className="text-gray-600">
+              AI automatically orders meals at scheduled times based on your diet plan
+            </p>
+          </button>
+
+          <button
+            onClick={() => router.push("/profile")}
+            className="bg-white rounded-lg shadow p-8 hover:shadow-lg transition-shadow text-left"
+          >
+            <div className="text-5xl mb-4">👤</div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Your Profile</h3>
+            <p className="text-gray-600">
+              View and edit your personal information, goals, and fetch menu items
+            </p>
+          </button>
         </div>
       </main>
     </div>
