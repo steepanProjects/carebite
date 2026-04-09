@@ -36,6 +36,10 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [integration, setIntegration] = useState<{
+    connected: boolean;
+    connectedAt?: string;
+  } | null>(null);
   const [formData, setFormData] = useState({
     age: "",
     height: "",
@@ -51,6 +55,7 @@ export default function ProfilePage() {
       router.push("/login");
     } else if (status === "authenticated") {
       fetchProfile();
+      fetchIntegrationStatus();
     }
   }, [status, router]);
 
@@ -74,6 +79,16 @@ export default function ProfilePage() {
       console.error("Error fetching profile:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchIntegrationStatus = async () => {
+    try {
+      const response = await fetch("/api/integration/status");
+      const data = await response.json();
+      setIntegration(data);
+    } catch (error) {
+      console.error("Error fetching integration status:", error);
     }
   };
 
@@ -241,6 +256,46 @@ export default function ProfilePage() {
                   <p className="text-gray-600 ml-7">{profile.medicalCondition}</p>
                 </div>
               )}
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🔗</span>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-800">SilloBite Connection</h3>
+                    <p className="text-sm text-gray-500">
+                      {integration?.connected
+                        ? "Your account is connected to SilloBite"
+                        : "Connect to enable smart food recommendations"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {integration?.connected ? (
+                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                      Connected
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm font-medium">
+                      Not Connected
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {integration?.connected && integration.connectedAt && (
+                <p className="text-sm text-gray-500 mb-4">
+                  Connected on {new Date(integration.connectedAt).toLocaleDateString()}
+                </p>
+              )}
+
+              <button
+                onClick={() => router.push("/connect")}
+                className="w-full bg-emerald-500 text-white py-3 rounded-lg font-medium hover:bg-emerald-600 transition-colors"
+              >
+                {integration?.connected ? "Reconnect SilloBite" : "Connect SilloBite"}
+              </button>
             </div>
           </>
         ) : (
