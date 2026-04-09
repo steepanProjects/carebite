@@ -21,39 +21,71 @@ export async function POST(req: Request) {
       );
     }
 
-    // Ensure menuItems is an array
-    let itemNames: string[] = [];
+    // Build structured item list with platform and canteen info
+    let structuredItems: Array<{
+      id: string;
+      name: string;
+      platform: string;
+      canteenId?: string;
+      canteenName?: string;
+    }> = [];
     
     if (Array.isArray(menuItems)) {
-      itemNames = menuItems.map((item: any) => {
-        if (typeof item === 'string') return item;
-        return item.name || item.dishName || item.title || item.dish_name || String(item);
-      }).filter(Boolean);
-    } else if (menuItems && typeof menuItems === 'object') {
-      // If it's an object, try to extract array from common properties
-      const possibleArrays = ['dishes', 'items', 'menu', 'data', 'menuItems'];
-      for (const key of possibleArrays) {
-        if (Array.isArray(menuItems[key])) {
-          itemNames = menuItems[key].map((item: any) => {
-            if (typeof item === 'string') return item;
-            return item.name || item.dishName || item.title || item.dish_name || String(item);
-          }).filter(Boolean);
-          break;
-        }
-      }
+      structuredItems = menuItems.map((item: any) => {
+        const name = item.name || item.dishName || item.title || item.dish_name || String(item);
+        const platform = item.platform || 'sillobite';
+        const canteenId = item.canteenId || item.canteen_id || item.restaurantId || item.restaurant_id;
+        const canteenName = item.canteenName || item.canteen_name || item.restaurantName || item.restaurant_name;
+        const id = item.id || item._id || item.menuItemId || item.menu_item_id;
+        
+        return { id, name, platform, canteenId, canteenName };
+      }).filter((item) => item.name && item.id);
     }
 
-    if (itemNames.length === 0) {
+    if (structuredItems.length === 0) {
       return NextResponse.json(
         { error: "No valid menu items found" },
         { status: 400 }
       );
     }
 
-    console.log("Item names to match:", itemNames.length, "items"); // Debug log
+    console.log("Items to match:", structuredItems.length, "items from all platforms");
+    console.log("Sample structured items:", structuredItems.slice(0, 3).map(item => ({
+      id: item.id,
+      name: item.name,
+      platform: item.platform,
+      canteenId: item.canteenId
+    })));
+
+    // Group items by platform and canteen to reduce token usage
+    const itemsByCanteen = structuredItems.reduce((acc: any, item) => {
+      const key = `${item.platform}:${item.canteenId}`;
+      if (!acc[key]) {
+        acc[key] = {
+          platform: item.platform,
+          canteenId: item.canteenId,
+          canteenName: item.canteenName,
+          items: []
+        };
+      }
+      acc[key].items.push(item);
+      return acc;
+    }, {});
+
+    // Create a more compact format: group by canteen, limit items to reduce tokens
+    const MAX_ITEMS_PER_CANTEEN = 50; // Limit items per canteen to stay within token limits
+    const compactList = Object.values(itemsByCanteen).map((canteen: any) => {
+      const itemsToShow = canteen.items.slice(0, MAX_ITEMS_PER_CANTEEN);
+      const itemNames = itemsToShow.map((item: any) => `${item.id}:${item.name}`).join(', ');
+      const moreText = canteen.items.length > MAX_ITEMS_PER_CANTEEN ? ` (+${canteen.items.length - MAX_ITEMS_PER_CANTEEN} more)` : '';
+      return `[${canteen.platform}] Canteen:${canteen.canteenId} (${canteen.canteenName || 'Unknown'})${moreText}\nItems: ${itemNames}`;
+    }).join('\n\n');
+
+    console.log("Canteens available:", Object.keys(itemsByCanteen).length);
+    console.log("Total items across all canteens:", structuredItems.length);
 
     // Create prompt for AI to match meals
-    const prompt = `You are a nutrition expert. Match meal requirements with available menu items.
+    const prompt = `You are a nutrition expert. Match meal requirements with available menu items from multiple platforms.
 
 MEAL REQUIREMENTS:
 - Calories: ${mealRequirements.cal}
@@ -70,15 +102,26 @@ ${userProfile ? `
 - Activity: ${userProfile.activityType}
 ` : "Not provided"}
 
-AVAILABLE ITEMS:
-${itemNames.join(', ')}
+AVAILABLE CANTEENS AND ITEMS (grouped by canteen for efficiency):
+${compactList}
 
-Select items that match nutritional needs. Consider medical conditions. Return ONLY JSON:
+CRITICAL INSTRUCTIONS:
+1. ALL selected items MUST be from the SAME platform AND SAME canteen
+2. Choose the canteen that has the best combination of dishes to meet nutritional requirements
+3. Consider medical conditions and dietary restrictions
+4. Return items with their EXACT menu item ID (the ID before the colon in "ID:Name" format)
+5. IMPORTANT: Extract the canteenId value from "Canteen:VALUE" - return only VALUE
+6. If no single canteen can fulfill the requirements well, choose the best available option
+
+Return ONLY JSON:
 {
   "items": [
     {
-      "platform": "sillobite",
-      "itemName": "Item Name",
+      "menuItemId": "exact_id_from_list",
+      "itemName": "Exact Item Name",
+      "platform": "platform_name",
+      "canteenId": "only_the_canteen_id_value",
+      "canteenName": "Canteen Name",
       "quantity": 1,
       "estimatedNutrition": {
         "cal": 300,
@@ -90,7 +133,7 @@ Select items that match nutritional needs. Consider medical conditions. Return O
   ],
   "totalNutrition": {"cal": 500, "p": 35, "c": 60, "f": 15},
   "matchScore": 95,
-  "notes": "Brief explanation"
+  "notes": "Brief explanation of why these items were chosen"
 }`;
 
     // Call Groq API
@@ -120,6 +163,23 @@ Select items that match nutritional needs. Consider medical conditions. Return O
     if (!response.ok) {
       const errorData = await response.json();
       console.error("Groq API error:", errorData);
+      
+      // Check if it's a rate limit error
+      if (errorData.error?.code === 'rate_limit_exceeded') {
+        const errorMsg = errorData.error.message;
+        // Extract wait time if available
+        const waitTimeMatch = errorMsg.match(/try again in ([\d.]+[smh]+)/);
+        const waitTime = waitTimeMatch ? waitTimeMatch[1] : 'some time';
+        
+        return NextResponse.json(
+          { 
+            error: `Rate limit reached. Please try again in ${waitTime}.`,
+            details: errorMsg
+          },
+          { status: 429 }
+        );
+      }
+      
       return NextResponse.json(
         { error: "Failed to match meals" },
         { status: response.status }
@@ -141,6 +201,28 @@ Select items that match nutritional needs. Consider medical conditions. Return O
     try {
       const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       matchResult = JSON.parse(cleanContent);
+      
+      // Post-process: Clean up canteenId if it has prefixes
+      if (matchResult.items && Array.isArray(matchResult.items)) {
+        matchResult.items = matchResult.items.map((item: any) => {
+          if (item.canteenId) {
+            // Remove any prefix like "R:", "Canteen:", etc.
+            item.canteenId = item.canteenId.replace(/^(R:|Canteen:|Restaurant:)/i, '');
+          }
+          if (item.restaurantId) {
+            // Also clean restaurantId for backward compatibility
+            item.restaurantId = item.restaurantId.replace(/^(R:|Canteen:|Restaurant:)/i, '');
+          }
+          return item;
+        });
+      }
+      
+      console.log("Matched items with cleaned IDs:", matchResult.items?.map((item: any) => ({
+        menuItemId: item.menuItemId,
+        itemName: item.itemName,
+        canteenId: item.canteenId,
+        platform: item.platform
+      })));
     } catch (parseError) {
       console.error("Failed to parse AI response:", content);
       return NextResponse.json(

@@ -14,6 +14,7 @@ export default function OrdersPage() {
   const [matchedItems, setMatchedItems] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [orderLoading, setOrderLoading] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -39,34 +40,92 @@ export default function OrdersPage() {
 
   const loadMenu = () => {
     try {
-      const cachedMenu = localStorage.getItem("sillobite_menu");
-      if (cachedMenu) {
-        const menuData = JSON.parse(cachedMenu);
-        // Extract just item names
-        let items: string[] = [];
-        
-        if (Array.isArray(menuData)) {
-          items = menuData.map((item: any) => {
-            if (typeof item === 'string') return item;
-            return item.name || item.dishName || item.title || item.dish_name || String(item);
-          }).filter(Boolean);
-        } else if (typeof menuData === 'object' && menuData !== null) {
-          const possibleArrays = ['dishes', 'items', 'menu', 'data', 'menuItems'];
-          for (const key of possibleArrays) {
-            if (Array.isArray(menuData[key])) {
-              items = menuData[key].map((item: any) => {
-                if (typeof item === 'string') return item;
-                return item.name || item.dishName || item.title || item.dish_name || String(item);
-              }).filter(Boolean);
-              break;
+      let allItems: any[] = [];
+      
+      // Load from all platform caches
+      const platforms = ['sillobite', 'figgy', 'komato'];
+      
+      platforms.forEach(platform => {
+        const cachedMenu = localStorage.getItem(`${platform}_menu`);
+        if (cachedMenu) {
+          try {
+            const menuData = JSON.parse(cachedMenu);
+            let items: any[] = [];
+            
+            if (Array.isArray(menuData)) {
+              items = menuData;
+            } else if (typeof menuData === 'object' && menuData !== null) {
+              const possibleArrays = ['dishes', 'items', 'menu', 'data', 'menuItems'];
+              for (const key of possibleArrays) {
+                if (Array.isArray(menuData[key])) {
+                  items = menuData[key];
+                  break;
+                }
+              }
             }
+            
+            // Ensure each item has platform info
+            items = items.map(item => ({
+              ...item,
+              platform: item.platform || platform
+            }));
+            
+            allItems = [...allItems, ...items];
+            console.log(`Loaded ${items.length} items from ${platform}`);
+          } catch (err) {
+            console.error(`Error parsing ${platform} menu:`, err);
           }
         }
-        
-        setMenuItems(items);
-      }
+      });
+      
+      console.log(`Total menu items loaded: ${allItems.length}`);
+      console.log("Sample items:", allItems.slice(0, 3).map(item => ({
+        id: item.id || item._id || item.menuItemId,
+        name: item.name || item.dishName || item.title,
+        canteenId: item.canteenId || item.canteen_id || item.restaurantId || item.restaurant_id,
+        platform: item.platform
+      })));
+      
+      setMenuItems(allItems);
     } catch (error) {
       console.error("Error loading menu:", error);
+    }
+  };
+
+  const fetchAllMenus = async () => {
+    setLoading(true);
+    try {
+      const platforms = ['sillobite', 'figgy', 'komato'];
+      let fetchedCount = 0;
+      
+      for (const platform of platforms) {
+        try {
+          const response = await fetch(`/api/menu?platform=${platform}`);
+          const result = await response.json();
+          
+          if (result.success && result.data) {
+            localStorage.setItem(`${platform}_menu`, JSON.stringify(result.data));
+            console.log(`Fetched and cached menu from ${platform}`);
+            fetchedCount++;
+          } else {
+            console.log(`${platform}: ${result.message || 'Not connected or no menu available'}`);
+          }
+        } catch (error) {
+          console.error(`Error fetching ${platform} menu:`, error);
+        }
+      }
+      
+      if (fetchedCount > 0) {
+        loadMenu(); // Reload from cache
+        alert(`Successfully fetched menus from ${fetchedCount} platform(s)`);
+      } else {
+        alert('No menus could be fetched. Please ensure platforms are connected.');
+      }
+    } catch (error) {
+      console.error("Error fetching menus:", error);
+      alert("Failed to fetch menus");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -100,9 +159,6 @@ export default function OrdersPage() {
         mealReq = { ...day.dn, mealType: "Dinner" };
       }
 
-      console.log("Menu items type:", typeof menuItems, "Is array:", Array.isArray(menuItems));
-      console.log("Menu items:", menuItems);
-
       const response = await fetch("/api/match-meals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,6 +181,127 @@ export default function OrdersPage() {
       alert("An error occurred while matching meals");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePlaceOrder = async () => {
+    if (!matchedItems || !matchedItems.items || matchedItems.items.length === 0) {
+      alert("No items to order");
+      return;
+    }
+
+    // Validate all items are from same platform and canteen
+    const firstItem = matchedItems.items[0];
+    const platform = firstItem.platform;
+    const canteenId = firstItem.canteenId || firstItem.restaurantId;
+
+    const allSamePlatform = matchedItems.items.every(
+      (item: any) => item.platform === platform
+    );
+    const allSameCanteen = matchedItems.items.every(
+      (item: any) => (item.canteenId || item.restaurantId) === canteenId
+    );
+
+    if (!allSamePlatform || !allSameCanteen) {
+      alert(
+        "Error: All items must be from the same platform and canteen. Please try matching again."
+      );
+      return;
+    }
+
+    if (!canteenId) {
+      alert("Error: Canteen ID is missing. Cannot place order.");
+      return;
+    }
+
+    setOrderLoading(true);
+
+    try {
+      // Map matched items to the format needed for order creation
+      const orderItems = matchedItems.items.map((item: any) => {
+        // First try to use the menuItemId directly from the matched item
+        let menuItemId = item.menuItemId;
+        
+        // If not found, try to find the original menu item with fuzzy matching
+        if (!menuItemId) {
+          const menuItem = menuItems.find(
+            (m: any) => {
+              const mName = (m.name || m.dishName || m.title || m.dish_name || '').toLowerCase().trim();
+              const itemName = (item.itemName || '').toLowerCase().trim();
+              const mPlatform = m.platform || 'sillobite';
+              const mCanteenId = m.canteenId || m.canteen_id || m.restaurantId || m.restaurant_id;
+              
+              // Exact match
+              if (mName === itemName && mPlatform === item.platform && mCanteenId === canteenId) {
+                return true;
+              }
+              
+              // Fuzzy match - check if names are similar (contains or very close)
+              if (mPlatform === item.platform && mCanteenId === canteenId) {
+                return mName.includes(itemName) || itemName.includes(mName);
+              }
+              
+              return false;
+            }
+          );
+          
+          menuItemId = menuItem?.id || menuItem?._id || menuItem?.menuItemId || menuItem?.menu_item_id;
+        }
+
+        return {
+          menuItemId: menuItemId,
+          itemName: item.itemName,
+          quantity: item.quantity || 1,
+        };
+      });
+
+      // Check if we have valid menu item IDs
+      const missingIds = orderItems.filter((item: any) => !item.menuItemId);
+      if (missingIds.length > 0) {
+        console.error("Missing menu item IDs:", missingIds);
+        console.error("Available menu items:", menuItems.map((m: any) => ({
+          id: m.id || m._id || m.menuItemId,
+          name: m.name || m.dishName || m.title || m.dish_name,
+          platform: m.platform,
+          canteenId: m.canteenId || m.canteen_id || m.restaurantId || m.restaurant_id
+        })));
+        alert(
+          `Error: Could not find menu item IDs for: ${missingIds.map((i: any) => i.itemName).join(", ")}\n\nPlease try matching again or contact support.`
+        );
+        return;
+      }
+
+      console.log("Placing order with canteenId:", canteenId);
+      console.log("Order items:", orderItems);
+
+      const response = await fetch("/api/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: orderItems,
+          platform: platform,
+          canteenId: canteenId,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        alert(
+          `Order placed successfully!\n\nOrder Number: ${result.order.orderNumber}\nAmount: ₹${result.order.amount}\nWallet Balance: ₹${result.order.walletBalance}`
+        );
+        // Clear matched items after successful order
+        setMatchedItems(null);
+      } else {
+        const errorMsg = result.details?.message || result.error || "Failed to place order";
+        const suggestion = result.details?.suggestion || "";
+        alert(`Order Failed\n\n${errorMsg}${suggestion ? "\n\n" + suggestion : ""}`);
+      }
+    } catch (error) {
+      console.error("Error placing order:", error);
+      alert("An error occurred while placing the order. Please try again.");
+    } finally {
+      setOrderLoading(false);
     }
   };
 
@@ -196,12 +373,28 @@ export default function OrdersPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            Order Management 🛒
-          </h2>
-          <p className="text-gray-600">
-            AI-powered meal matching based on your diet plan
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                Order Management 🛒
+              </h2>
+              <p className="text-gray-600">
+                AI automatically selects the best matching dishes from all platforms and restaurants
+              </p>
+              {menuItems.length > 0 && (
+                <p className="text-sm text-emerald-600 mt-2">
+                  {menuItems.length} items loaded from all connected platforms
+                </p>
+              )}
+            </div>
+            <button
+              onClick={fetchAllMenus}
+              disabled={loading}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 transition-colors"
+            >
+              {loading ? "Fetching..." : "Refresh Menus"}
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -326,8 +519,8 @@ export default function OrdersPage() {
                       <div className="flex justify-between items-start mb-2">
                         <div>
                           <div className="font-semibold text-gray-800">{item.itemName}</div>
-                          {item.restaurantName && (
-                            <div className="text-xs text-gray-500">{item.restaurantName}</div>
+                          {item.canteenName || item.restaurantName && (
+                            <div className="text-xs text-gray-500">{item.canteenName || item.restaurantName}</div>
                           )}
                           <div className="text-xs text-gray-500">Platform: {item.platform}</div>
                         </div>
@@ -354,10 +547,11 @@ export default function OrdersPage() {
                 </div>
 
                 <button
-                  className="w-full bg-blue-500 text-white py-3 rounded-lg font-medium hover:bg-blue-600 transition-colors"
-                  onClick={() => alert("Order API integration coming soon!")}
+                  className="w-full bg-blue-500 text-white py-3 rounded-lg font-medium hover:bg-blue-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  onClick={handlePlaceOrder}
+                  disabled={orderLoading}
                 >
-                  Place Order (Coming Soon)
+                  {orderLoading ? "Placing Order..." : "Place Order"}
                 </button>
               </div>
             ) : (
