@@ -12,21 +12,22 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { integration: true },
+      include: { integrations: true },
     });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    const integrations = user.integrations.map(integration => ({
+      platform: integration.platform,
+      connectedAt: integration.connectedAt,
+      platformUserId: integration.platformUserId,
+    }));
+
     return NextResponse.json({
-      connected: !!user.integration,
-      integration: user.integration
-        ? {
-            connectedAt: user.integration.connectedAt,
-            sillobiteUserId: user.integration.sillobiteUserId,
-          }
-        : null,
+      connected: integrations.length > 0,
+      integrations,
     });
   } catch (error) {
     console.error("Error fetching integration status:", error);
