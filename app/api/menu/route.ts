@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
-
-const SILLOBITE_API_URL = process.env.SILLOBITE_API_URL || "http://localhost:5000";
+import { PLATFORMS, Platform } from "@/lib/platforms";
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,26 +14,48 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: { integration: true },
-    });
+    // Get platform from query params
+    const { searchParams } = new URL(request.url);
+    const platform = searchParams.get('platform') as Platform || 'sillobite';
 
-    if (!user || !user.integration?.accessToken) {
+    if (!PLATFORMS[platform]) {
       return NextResponse.json(
-        { success: false, message: "SilloBite not connected. Please connect first." },
+        { success: false, message: "Invalid platform" },
         { status: 400 }
       );
     }
 
-    const response = await fetch(`${SILLOBITE_API_URL}/api/carebite/menu`, {
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      include: { integrations: true },
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "User not found" },
+        { status: 404 }
+      );
+    }
+
+    const integration = user.integrations.find(i => i.platform === platform);
+
+    if (!integration?.accessToken) {
+      const platformConfig = PLATFORMS[platform];
+      return NextResponse.json(
+        { success: false, message: `${platformConfig.displayName} not connected. Please connect first.` },
+        { status: 400 }
+      );
+    }
+
+    const platformConfig = PLATFORMS[platform];
+    const response = await fetch(`${platformConfig.apiUrl}/api/carebite/menu`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         email: session.user.email,
-        accessToken: user.integration.accessToken,
+        accessToken: integration.accessToken,
       }),
     });
 
@@ -43,7 +64,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { 
           success: false, 
-          message: errorData.message || "Failed to fetch menu from SilloBite" 
+          message: errorData.message || `Failed to fetch menu from ${platformConfig.displayName}` 
         },
         { status: response.status }
       );
@@ -54,6 +75,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: menuData,
+      platform,
     });
   } catch (error) {
     console.error("Fetch menu error:", error);

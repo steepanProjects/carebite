@@ -14,6 +14,18 @@ interface UserProfile {
   medicalCondition?: string;
 }
 
+interface Integration {
+  platform: string;
+  connectedAt: string;
+  platformUserId: string;
+}
+
+const PLATFORMS = [
+  { id: 'sillobite', name: 'SilloBite', icon: '🍽️' },
+  { id: 'figgy', name: 'Figgy', icon: '🥗' },
+  { id: 'komato', name: 'Komato', icon: '🍅' },
+];
+
 const fitnessGoals = [
   { id: "weight_loss", title: "Weight Loss" },
   { id: "muscle_gain", title: "Muscle Gain" },
@@ -36,12 +48,9 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [integration, setIntegration] = useState<{
-    connected: boolean;
-    connectedAt?: string;
-  } | null>(null);
-  const [fetchingMenu, setFetchingMenu] = useState(false);
-  const [menuData, setMenuData] = useState<any>(null);
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [fetchingMenu, setFetchingMenu] = useState<string | null>(null);
+  const [menuData, setMenuData] = useState<Record<string, any>>({});
   const [formData, setFormData] = useState({
     age: "",
     height: "",
@@ -58,7 +67,7 @@ export default function ProfilePage() {
     } else if (status === "authenticated") {
       fetchProfile();
       fetchIntegrationStatus();
-      loadMenuFromCache();
+      loadMenusFromCache();
     }
   }, [status, router]);
 
@@ -89,32 +98,36 @@ export default function ProfilePage() {
     try {
       const response = await fetch("/api/integration/status");
       const data = await response.json();
-      setIntegration(data);
+      setIntegrations(data.integrations || []);
     } catch (error) {
       console.error("Error fetching integration status:", error);
     }
   };
 
-  const loadMenuFromCache = () => {
+  const loadMenusFromCache = () => {
     try {
-      const cachedMenu = localStorage.getItem("sillobite_menu");
-      if (cachedMenu) {
-        setMenuData(JSON.parse(cachedMenu));
-      }
+      const menus: Record<string, any> = {};
+      PLATFORMS.forEach(platform => {
+        const cached = localStorage.getItem(`${platform.id}_menu`);
+        if (cached) {
+          menus[platform.id] = JSON.parse(cached);
+        }
+      });
+      setMenuData(menus);
     } catch (error) {
-      console.error("Error loading menu from cache:", error);
+      console.error("Error loading menus from cache:", error);
     }
   };
 
-  const handleFetchMenu = async () => {
-    setFetchingMenu(true);
+  const handleFetchMenu = async (platform: string) => {
+    setFetchingMenu(platform);
     try {
-      const response = await fetch("/api/menu");
+      const response = await fetch(`/api/menu?platform=${platform}`);
       const result = await response.json();
 
       if (result.success && result.data) {
-        setMenuData(result.data);
-        localStorage.setItem("sillobite_menu", JSON.stringify(result.data));
+        setMenuData(prev => ({ ...prev, [platform]: result.data }));
+        localStorage.setItem(`${platform}_menu`, JSON.stringify(result.data));
         alert("Menu fetched successfully!");
       } else {
         alert(result.message || "Failed to fetch menu");
@@ -123,7 +136,7 @@ export default function ProfilePage() {
       console.error("Error fetching menu:", error);
       alert("Error fetching menu. Please try again.");
     } finally {
-      setFetchingMenu(false);
+      setFetchingMenu(null);
     }
   };
 
@@ -161,6 +174,10 @@ export default function ProfilePage() {
 
   const getActivityTitle = (activity: string) => {
     return activityTypes.find(a => a.id === activity)?.title || activity;
+  };
+
+  const isPlatformConnected = (platformId: string) => {
+    return integrations.some(i => i.platform === platformId);
   };
 
   if (status === "loading" || loading) {
@@ -293,87 +310,92 @@ export default function ProfilePage() {
               )}
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🔗</span>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-800">SilloBite Connection</h3>
-                    <p className="text-sm text-gray-500">
-                      {integration?.connected
-                        ? "Your account is connected to SilloBite"
-                        : "Connect to enable smart food recommendations"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {integration?.connected ? (
-                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                      Connected
-                    </span>
-                  ) : (
-                    <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm font-medium">
-                      Not Connected
-                    </span>
-                  )}
+            {/* Platform Connections */}
+            <div className="bg-white rounded-lg shadow p-6 mb-6">
+              <div className="flex items-center gap-3 mb-6">
+                <span className="text-2xl">🔗</span>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800">Platform Connections</h3>
+                  <p className="text-sm text-gray-500">
+                    Connect to platforms to enable smart food recommendations
+                  </p>
                 </div>
               </div>
 
-              {integration?.connected && integration.connectedAt && (
-                <p className="text-sm text-gray-500 mb-4">
-                  Connected on {new Date(integration.connectedAt).toLocaleDateString()}
-                </p>
-              )}
+              <div className="space-y-4">
+                {PLATFORMS.map(platform => {
+                  const isConnected = isPlatformConnected(platform.id);
+                  const integration = integrations.find(i => i.platform === platform.id);
+                  const hasMenu = !!menuData[platform.id];
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => router.push("/connect")}
-                  className="flex-1 bg-emerald-500 text-white py-3 rounded-lg font-medium hover:bg-emerald-600 transition-colors"
-                >
-                  {integration?.connected ? "Reconnect SilloBite" : "Connect SilloBite"}
-                </button>
-                {integration?.connected && (
-                  <button
-                    onClick={handleFetchMenu}
-                    disabled={fetchingMenu}
-                    className="flex-1 bg-blue-500 text-white py-3 rounded-lg font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {fetchingMenu ? "Fetching..." : "Fetch Menu"}
-                  </button>
-                )}
+                  return (
+                    <div key={platform.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl">{platform.icon}</span>
+                          <div>
+                            <h4 className="font-semibold text-gray-800">{platform.name}</h4>
+                            {isConnected && integration && (
+                              <p className="text-xs text-gray-500">
+                                Connected on {new Date(integration.connectedAt).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          isConnected 
+                            ? "bg-green-100 text-green-700" 
+                            : "bg-gray-100 text-gray-600"
+                        }`}>
+                          {isConnected ? "Connected" : "Not Connected"}
+                        </span>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => router.push("/connect")}
+                          className="flex-1 bg-emerald-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-emerald-600 transition-colors text-sm"
+                        >
+                          {isConnected ? "Reconnect" : "Connect"}
+                        </button>
+                        {isConnected && (
+                          <button
+                            onClick={() => handleFetchMenu(platform.id)}
+                            disabled={fetchingMenu === platform.id}
+                            className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-sm"
+                          >
+                            {fetchingMenu === platform.id ? "Fetching..." : "Fetch Menu"}
+                          </button>
+                        )}
+                        {hasMenu && (
+                          <button
+                            onClick={() => {
+                              localStorage.removeItem(`${platform.id}_menu`);
+                              setMenuData(prev => {
+                                const newData = { ...prev };
+                                delete newData[platform.id];
+                                return newData;
+                              });
+                            }}
+                            className="px-4 py-2 bg-red-100 text-red-600 rounded-lg font-medium hover:bg-red-200 transition-colors text-sm"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+
+                      {hasMenu && (
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <p className="text-xs text-gray-600">
+                            Menu cached: {menuData[platform.id].menuItems?.length || 0} items available
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-
-            {menuData && (
-              <div className="bg-white rounded-lg shadow p-6 mt-6">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Menu Data</h3>
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-semibold text-gray-700 mb-2">User Info</h4>
-                    <p className="text-sm text-gray-600">Email: {menuData.user?.email}</p>
-                    <p className="text-sm text-gray-600">Name: {menuData.user?.name}</p>
-                    <p className="text-sm text-gray-600">Location: {menuData.user?.locationType}</p>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-700 mb-2">Canteens</h4>
-                    <p className="text-sm text-gray-600">{menuData.canteens?.length || 0} canteens available</p>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-700 mb-2">Menu Items</h4>
-                    <p className="text-sm text-gray-600">{menuData.menuItems?.length || 0} items available</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem("sillobite_menu");
-                      setMenuData(null);
-                    }}
-                    className="text-sm text-red-600 hover:text-red-700"
-                  >
-                    Clear cached menu
-                  </button>
-                </div>
-              </div>
-            )}
           </>
         ) : (
           <>
