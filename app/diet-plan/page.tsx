@@ -18,6 +18,7 @@ export default function DietPlanPage() {
       router.push("/login");
     } else if (status === "authenticated") {
       loadMenuFromCache();
+      loadSavedDietPlan(); // Load previously saved diet plan if exists
     }
   }, [status, router]);
 
@@ -99,7 +100,7 @@ export default function DietPlanPage() {
 
       if (response.ok && result.success) {
         setDietPlan(result);
-        // Save to localStorage for future reference
+        // Save to localStorage - will persist until next plan is generated
         localStorage.setItem("current_diet_plan", JSON.stringify(result));
       } else {
         setError(result.error || "Failed to generate diet plan");
@@ -112,17 +113,17 @@ export default function DietPlanPage() {
     }
   };
 
-  const downloadDietPlan = () => {
-    if (!dietPlan) return;
-    
-    const dataStr = JSON.stringify(dietPlan, null, 2);
-    const dataBlob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `diet-plan-${days}-days.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const loadSavedDietPlan = () => {
+    try {
+      const savedPlan = localStorage.getItem("current_diet_plan");
+      if (savedPlan) {
+        const plan = JSON.parse(savedPlan);
+        setDietPlan(plan);
+        setDays(plan.dietPlan?.dietPlan?.length || 7);
+      }
+    } catch (error) {
+      console.error("Error loading saved diet plan:", error);
+    }
   };
 
   if (status === "loading") {
@@ -237,21 +238,19 @@ export default function DietPlanPage() {
                       <span className="font-semibold">Strategy:</span> {dietPlan.dietPlan.nutritionalNotes}
                     </p>
                   )}
+                  <p className="text-sm text-gray-500 mt-2">
+                    💾 This plan is saved and will be available until you generate a new one
+                  </p>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={downloadDietPlan}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                  >
-                    📥 Download JSON
-                  </button>
-                  <button
-                    onClick={() => setDietPlan(null)}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-                  >
-                    Generate New
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    setDietPlan(null);
+                    localStorage.removeItem("current_diet_plan");
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Generate New Plan
+                </button>
               </div>
             </div>
 
@@ -340,9 +339,9 @@ export default function DietPlanPage() {
 
             {/* Order Placement Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-semibold text-blue-900 mb-2">📋 For Order Placement:</h4>
+              <h4 className="font-semibold text-blue-900 mb-2">📋 Diet Plan Saved</h4>
               <p className="text-sm text-blue-800 mb-2">
-                The downloaded JSON contains all meals organized by day with suggested timings:
+                Your personalized diet plan is saved in cache memory with meal timings:
               </p>
               <ul className="text-sm text-blue-800 space-y-1 ml-4">
                 <li>• Breakfast: 8:00 AM</li>
@@ -350,6 +349,9 @@ export default function DietPlanPage() {
                 <li>• Snacks: 4:00 PM</li>
                 <li>• Dinner: 8:00 PM</li>
               </ul>
+              <p className="text-sm text-blue-800 mt-2">
+                This plan will remain available until you generate a new one.
+              </p>
             </div>
           </div>
         )}
