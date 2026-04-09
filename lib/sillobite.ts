@@ -1,9 +1,9 @@
-const SILLOBITE_API_URL = process.env.SILLOBITE_API_URL || "https://sillobite-backend.com";
+const SILLOBITE_API_URL = process.env.SILLOBITE_API_URL || "http://localhost:5000";
 
 interface VerifyCodeResponse {
   success: boolean;
   access_token?: string;
-  user_id?: string;
+  user_id?: string | number;
   message?: string;
 }
 
@@ -12,23 +12,24 @@ export async function verifyCode(
   code: string
 ): Promise<VerifyCodeResponse> {
   try {
-    const response = await fetch(
-      `${SILLOBITE_API_URL}/auth/verify-code`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, code }),
-      }
-    );
+    const url = `${SILLOBITE_API_URL}/api/auth/verify-code`;
+    console.log("Calling SilloBite API:", url);
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, code }),
+    });
 
     const data = await response.json();
+    console.log("SilloBite API response:", data);
 
     if (!response.ok) {
       return {
         success: false,
-        message: data.message || "Failed to verify code",
+        message: data.error || data.message || "Failed to verify code",
       };
     }
 
@@ -38,6 +39,7 @@ export async function verifyCode(
       user_id: data.user_id,
     };
   } catch (error) {
+    console.error("SilloBite API error:", error);
     return {
       success: false,
       message: "Network error. Please try again.",
