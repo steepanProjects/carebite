@@ -3,232 +3,135 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import BottomNav from "@/components/BottomNav";
 
-interface ScheduledMeal {
-  day: number;
+interface AutoOrderConfig {
+  enabled: boolean;
+  breakfastEnabled: boolean;
+  lunchEnabled: boolean;
+  dinnerEnabled: boolean;
+  breakfastTime: string;
+  lunchTime: string;
+  dinnerTime: string;
+  mondayEnabled: boolean;
+  tuesdayEnabled: boolean;
+  wednesdayEnabled: boolean;
+  thursdayEnabled: boolean;
+  fridayEnabled: boolean;
+  saturdayEnabled: boolean;
+  sundayEnabled: boolean;
+}
+
+interface UpcomingOrder {
+  date: string;
   dayName: string;
-  mealType: "breakfast" | "lunch" | "dinner";
+  mealType: string;
   scheduledTime: string;
   requirements: any;
-  status: "pending" | "scheduled" | "ordered" | "failed";
-  orderId?: string;
-  orderNumber?: string;
-  matchedItems?: any;
-  error?: string;
+  dietDay: number;
+  enabled: boolean;
 }
 
 export default function AutoOrdersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [dietPlan, setDietPlan] = useState<any>(null);
-  const [scheduledMeals, setScheduledMeals] = useState<ScheduledMeal[]>([]);
+  const [config, setConfig] = useState<AutoOrderConfig | null>(null);
+  const [upcoming, setUpcoming] = useState<UpcomingOrder[]>([]);
   const [loading, setLoading] = useState(false);
-  const [autoOrderEnabled, setAutoOrderEnabled] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
     } else if (status === "authenticated") {
-      loadDietPlan();
-      loadScheduledOrders();
+      loadConfig();
+      loadUpcoming();
     }
   }, [status, router]);
 
-  const loadDietPlan = () => {
+  const loadConfig = async () => {
     try {
-      const savedPlan = localStorage.getItem("current_diet_plan");
-      if (savedPlan) {
-        const plan = JSON.parse(savedPlan);
-        console.log("Loaded diet plan:", plan);
-        console.log("Diet plan structure:", {
-          hasDietPlan: !!plan.dietPlan,
-          hasPlan: !!plan.plan,
-          keys: Object.keys(plan)
-        });
-        setDietPlan(plan);
-        generateMealSchedule(plan);
-      } else {
-        console.log("No diet plan found in localStorage");
-      }
-    } catch (error) {
-      console.error("Error loading diet plan:", error);
-    }
-  };
-
-  const loadScheduledOrders = async () => {
-    try {
-      const response = await fetch("/api/auto-order/schedule");
+      const response = await fetch("/api/auto-order/config");
       const data = await response.json();
-      
-      if (data.success && data.orders) {
-        setScheduledMeals(data.orders);
+      if (data.success) {
+        setConfig(data.config);
       }
     } catch (error) {
-      console.error("Error loading scheduled orders:", error);
+      console.error("Error loading config:", error);
     }
   };
 
-  const saveScheduledOrders = (meals: ScheduledMeal[]) => {
-    setScheduledMeals(meals);
-    // Reload from database to get latest status
-    loadScheduledOrders();
-  };
-
-  const generateMealSchedule = (plan: any) => {
-    const meals: ScheduledMeal[] = [];
-    const days = plan.dietPlan.plan || [];
-
-    // Only generate schedule for display purposes
-    // Actual ordering will be done day-by-day by the cron job
-    days.forEach((day: any) => {
-      // Breakfast at 7:30 AM
-      meals.push({
-        day: day.d,
-        dayName: day.day,
-        mealType: "breakfast",
-        scheduledTime: "07:30",
-        requirements: { ...day.b, mealType: "Breakfast" },
-        status: "pending",
-      });
-
-      // Lunch at 12:30 PM
-      meals.push({
-        day: day.d,
-        dayName: day.day,
-        mealType: "lunch",
-        scheduledTime: "12:30",
-        requirements: { ...day.l, mealType: "Lunch" },
-        status: "pending",
-      });
-
-      // Dinner at 7:30 PM
-      meals.push({
-        day: day.d,
-        dayName: day.day,
-        mealType: "dinner",
-        scheduledTime: "19:30",
-        requirements: { ...day.dn, mealType: "Dinner" },
-        status: "pending",
-      });
-    });
-
-    setScheduledMeals(meals);
-  };
-
-  const scheduleAllMeals = async () => {
-    setLoading(true);
+  const loadUpcoming = async () => {
     try {
-      console.log("Diet plan object:", dietPlan);
-      console.log("Sending to API:", { 
-        dietPlan: dietPlan.dietPlan,
-        startDate: new Date().toISOString() 
-      });
+      const response = await fetch("/api/auto-order/upcoming");
+      const data = await response.json();
+      if (data.success) {
+        setUpcoming(data.upcoming || []);
+      }
+    } catch (error) {
+      console.error("Error loading upcoming orders:", error);
+    }
+  };
 
-      // Save the diet plan to database for the cron job to use
-      const response = await fetch("/api/auto-order/schedule", {
+  const updateConfig = async (updates: Partial<AutoOrderConfig>) => {
+    if (!config) return;
+
+    setSaving(true);
+    try {
+      const newConfig = { ...config, ...updates };
+      const response = await fetch("/api/auto-order/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          dietPlan: dietPlan?.dietPlan || dietPlan,
-          startDate: new Date().toISOString() 
-        }),
+        body: JSON.stringify(newConfig),
       });
 
-      const result = await response.json();
-      console.log("API response:", result);
-
-      if (response.ok && result.success) {
-        alert(`Automated ordering enabled! Orders will be placed automatically at meal times.`);
-        setAutoOrderEnabled(true);
-        await loadScheduledOrders();
+      const data = await response.json();
+      if (data.success) {
+        setConfig(data.config);
+        await loadUpcoming(); // Reload upcoming orders
       } else {
-        alert(result.error || "Failed to enable automated ordering");
+        alert("Failed to update configuration");
       }
     } catch (error) {
-      console.error("Error enabling automated ordering:", error);
-      alert("An error occurred while enabling automated ordering");
+      console.error("Error updating config:", error);
+      alert("An error occurred while updating configuration");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const testOrderNow = async (mealIndex: number) => {
-    setLoading(true);
-    const meal = scheduledMeals[mealIndex];
+  const toggleAutoOrder = async () => {
+    if (!config) return;
+    await updateConfig({ enabled: !config.enabled });
+  };
 
+  const toggleUpcomingOrder = async (order: UpcomingOrder) => {
+    setSaving(true);
     try {
-      const response = await fetch("/api/auto-order/place", {
+      const response = await fetch("/api/auto-order/upcoming", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mealRequirements: meal.requirements,
+          date: order.date,
+          mealType: order.mealType,
+          enabled: !order.enabled,
         }),
       });
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        const updatedMeals = [...scheduledMeals];
-        updatedMeals[mealIndex] = {
-          ...meal,
-          status: "ordered",
-          orderId: result.order?.id,
-          orderNumber: result.order?.orderNumber,
-          matchedItems: result.matchedItems,
-        };
-        saveScheduledOrders(updatedMeals);
-        alert(`Order placed successfully!\nOrder Number: ${result.order?.orderNumber}`);
+      const data = await response.json();
+      if (data.success) {
+        // Reload upcoming orders
+        await loadUpcoming();
       } else {
-        const updatedMeals = [...scheduledMeals];
-        updatedMeals[mealIndex] = {
-          ...meal,
-          status: "failed",
-          error: result.error,
-        };
-        saveScheduledOrders(updatedMeals);
-        alert(`Order failed: ${result.error}`);
+        alert("Failed to toggle schedule");
       }
     } catch (error) {
-      console.error("Error placing order:", error);
-      alert("An error occurred while placing the order");
+      console.error("Error toggling schedule:", error);
+      alert("An error occurred while toggling schedule");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
-
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
-      </div>
-    );
-  }
-
-  if (!dietPlan) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 py-4">
-            <h1 className="text-xl font-bold text-gray-800">Automated Ordering</h1>
-          </div>
-        </header>
-        <main className="max-w-7xl mx-auto px-4 py-8">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-yellow-900 mb-2">No Diet Plan Found</h3>
-            <p className="text-yellow-800 mb-4">
-              Please generate a diet plan first before setting up automated ordering.
-            </p>
-            <button
-              onClick={() => router.push("/diet-plan")}
-              className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"
-            >
-              Generate Diet Plan
-            </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
 
   const getMealIcon = (mealType: string) => {
     switch (mealType) {
@@ -243,121 +146,258 @@ export default function AutoOrdersPage() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "ordered":
-        return "bg-green-100 text-green-800 border-green-300";
-      case "scheduled":
-        return "bg-blue-100 text-blue-800 border-blue-300";
-      case "failed":
-        return "bg-red-100 text-red-800 border-red-300";
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-300";
-    }
-  };
+  if (status === "loading" || !config) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-rich-black">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+    <div className="min-h-screen bg-rich-black pb-24 md:pb-8">
+      <header className="bg-rich-black-50 shadow-sm border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push("/dashboard")}
-              className="text-gray-600 hover:text-gray-800"
+              className="text-gray-400 hover:text-white transition-colors"
             >
               ← Back
             </button>
-            <h1 className="text-xl font-bold text-gray-800">🤖 Automated Ordering</h1>
+            <h1 className="text-xl font-bold text-white">🤖 Automated Ordering</h1>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                Automated Meal Ordering
-              </h2>
-              <p className="text-gray-600">
-                Orders are automatically placed at scheduled times based on your diet plan
+      <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        {/* Master Toggle Card */}
+        <div className="bg-rich-black-50 rounded-2xl shadow border border-white/10 p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <h2 className="text-2xl font-bold text-white mb-2">Auto-Ordering</h2>
+              <p className="text-gray-400 text-sm">
+                {config.enabled
+                  ? "Orders are automatically placed based on your schedule"
+                  : "Enable to start automatic meal ordering"}
               </p>
-              <div className="mt-3 space-y-1 text-sm text-gray-600">
-                <div>🌅 Breakfast: 7:30 AM</div>
-                <div>☀️ Lunch: 12:30 PM</div>
-                <div>🌙 Dinner: 7:30 PM</div>
-              </div>
             </div>
             <button
-              onClick={scheduleAllMeals}
-              disabled={loading}
-              className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:bg-gray-400"
+              onClick={toggleAutoOrder}
+              disabled={saving}
+              className={`relative inline-flex h-12 w-24 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-white/30 focus:ring-offset-2 focus:ring-offset-rich-black ${config.enabled ? "bg-emerald-500" : "bg-white/20"
+                } ${saving ? "opacity-50 cursor-not-allowed" : ""}`}
             >
-              {loading ? "Processing..." : "Enable Auto-Ordering"}
+              <span
+                className={`inline-block h-10 w-10 transform rounded-full bg-white shadow-lg transition-transform ${config.enabled ? "translate-x-12" : "translate-x-1"
+                  }`}
+              />
             </button>
           </div>
         </div>
 
-        <div className="space-y-4">
-          {scheduledMeals.map((meal, index) => (
-            <div key={index} className="bg-white rounded-lg shadow p-4">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl">{getMealIcon(meal.mealType)}</span>
-                    <div>
-                      <h3 className="font-semibold text-gray-800">
-                        Day {meal.day} - {meal.dayName}
-                      </h3>
-                      <p className="text-sm text-gray-600">
-                        {meal.mealType.charAt(0).toUpperCase() + meal.mealType.slice(1)} at{" "}
-                        {meal.scheduledTime}
-                      </p>
-                    </div>
-                  </div>
+        {/* Upcoming Orders Card */}
+        {config.enabled && (
+          <div className="bg-rich-black-50 rounded-2xl shadow border border-white/10 p-6">
+            <h3 className="text-xl font-bold text-white mb-4">📅 Next 3 Scheduled Orders</h3>
+            {upcoming.length > 0 ? (
+              <div className="space-y-3">
+                {upcoming.map((order, index) => {
+                  const orderDate = new Date(order.date);
+                  const isToday =
+                    orderDate.toDateString() === new Date().toDateString();
+                  const isTomorrow =
+                    orderDate.toDateString() ===
+                    new Date(Date.now() + 86400000).toDateString();
 
-                  <div className="text-sm text-gray-600 mb-2">
-                    <span>Cal: {meal.requirements.cal}</span>
-                    <span className="mx-2">|</span>
-                    <span>P: {meal.requirements.p}g</span>
-                    <span className="mx-2">|</span>
-                    <span>C: {meal.requirements.c}g</span>
-                    <span className="mx-2">|</span>
-                    <span>F: {meal.requirements.f}g</span>
-                  </div>
+                  let dateLabel = orderDate.toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "short",
+                    day: "numeric",
+                  });
+                  if (isToday) dateLabel = "Today";
+                  else if (isTomorrow) dateLabel = "Tomorrow";
 
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(
-                        meal.status
-                      )}`}
+                  return (
+                    <div
+                      key={index}
+                      className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all"
                     >
-                      {meal.status.toUpperCase()}
-                    </span>
-                    {meal.orderNumber && (
-                      <span className="text-xs text-gray-600">
-                        Order #{meal.orderNumber}
-                      </span>
-                    )}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <span className="text-3xl">{getMealIcon(order.mealType)}</span>
+                          <div className="flex-1">
+                            <div className="font-semibold text-white capitalize">
+                              {order.mealType}
+                            </div>
+                            <div className="text-sm text-gray-400">
+                              {dateLabel} at {order.scheduledTime}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <div className="text-xs text-gray-500">Diet Day {order.dietDay}</div>
+                            <div className="text-sm font-semibold text-white">
+                              {order.requirements?.cal || 0} cal
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => toggleUpcomingOrder(order)}
+                            disabled={saving}
+                            className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors ${order.enabled ? "bg-emerald-500" : "bg-white/20"
+                              } ${saving ? "opacity-50" : ""}`}
+                            title={order.enabled ? "Click to disable" : "Click to enable"}
+                          >
+                            <span
+                              className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform ${order.enabled ? "translate-x-9" : "translate-x-1"
+                                }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p>No upcoming orders scheduled</p>
+                <p className="text-sm mt-2">Check your meal and day settings below</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Meal Toggles Card */}
+        {config.enabled && (
+          <div className="bg-rich-black-50 rounded-2xl shadow border border-white/10 p-6">
+            <h3 className="text-xl font-bold text-white mb-4">🍽️ Meal Settings</h3>
+            <div className="space-y-4">
+              {/* Breakfast */}
+              <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🌅</span>
+                  <div>
+                    <div className="font-semibold text-white">Breakfast</div>
+                    <div className="text-sm text-gray-400">{config.breakfastTime}</div>
                   </div>
-
-                  {meal.error && (
-                    <div className="mt-2 text-xs text-red-600">Error: {meal.error}</div>
-                  )}
                 </div>
-
                 <button
-                  onClick={() => testOrderNow(index)}
-                  disabled={loading || meal.status === "ordered"}
-                  className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 disabled:bg-gray-400"
+                  onClick={() =>
+                    updateConfig({ breakfastEnabled: !config.breakfastEnabled })
+                  }
+                  disabled={saving}
+                  className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors ${config.breakfastEnabled ? "bg-emerald-500" : "bg-white/20"
+                    } ${saving ? "opacity-50" : ""}`}
                 >
-                  {loading ? "..." : meal.status === "ordered" ? "Ordered" : "Order Now"}
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform ${config.breakfastEnabled ? "translate-x-9" : "translate-x-1"
+                      }`}
+                  />
+                </button>
+              </div>
+
+              {/* Lunch */}
+              <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">☀️</span>
+                  <div>
+                    <div className="font-semibold text-white">Lunch</div>
+                    <div className="text-sm text-gray-400">{config.lunchTime}</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => updateConfig({ lunchEnabled: !config.lunchEnabled })}
+                  disabled={saving}
+                  className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors ${config.lunchEnabled ? "bg-emerald-500" : "bg-white/20"
+                    } ${saving ? "opacity-50" : ""}`}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform ${config.lunchEnabled ? "translate-x-9" : "translate-x-1"
+                      }`}
+                  />
+                </button>
+              </div>
+
+              {/* Dinner */}
+              <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🌙</span>
+                  <div>
+                    <div className="font-semibold text-white">Dinner</div>
+                    <div className="text-sm text-gray-400">{config.dinnerTime}</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => updateConfig({ dinnerEnabled: !config.dinnerEnabled })}
+                  disabled={saving}
+                  className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors ${config.dinnerEnabled ? "bg-emerald-500" : "bg-white/20"
+                    } ${saving ? "opacity-50" : ""}`}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform ${config.dinnerEnabled ? "translate-x-9" : "translate-x-1"
+                      }`}
+                  />
                 </button>
               </div>
             </div>
-          ))}
+          </div>
+        )}
+
+        {/* Weekly Schedule Card */}
+        {config.enabled && (
+          <div className="bg-rich-black-50 rounded-2xl shadow border border-white/10 p-6">
+            <h3 className="text-xl font-bold text-white mb-4">📆 Weekly Schedule</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+              {[
+                { key: "mondayEnabled", label: "Mon", full: "Monday" },
+                { key: "tuesdayEnabled", label: "Tue", full: "Tuesday" },
+                { key: "wednesdayEnabled", label: "Wed", full: "Wednesday" },
+                { key: "thursdayEnabled", label: "Thu", full: "Thursday" },
+                { key: "fridayEnabled", label: "Fri", full: "Friday" },
+                { key: "saturdayEnabled", label: "Sat", full: "Saturday" },
+                { key: "sundayEnabled", label: "Sun", full: "Sunday" },
+              ].map((day) => {
+                const isEnabled = config[day.key as keyof AutoOrderConfig] as boolean;
+                return (
+                  <button
+                    key={day.key}
+                    onClick={() => updateConfig({ [day.key]: !isEnabled })}
+                    disabled={saving}
+                    className={`p-4 rounded-xl border-2 transition-all ${isEnabled
+                      ? "bg-emerald-500/20 border-emerald-500 text-white"
+                      : "bg-white/5 border-white/10 text-gray-500"
+                      } ${saving ? "opacity-50 cursor-not-allowed" : "hover:scale-105"}`}
+                  >
+                    <div className="font-bold text-lg">{day.label}</div>
+                    <div className="text-xs mt-1 hidden md:block">{day.full}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Info Card */}
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-6">
+          <div className="flex gap-3">
+            <span className="text-2xl">ℹ️</span>
+            <div>
+              <h4 className="font-semibold text-white mb-2">How It Works</h4>
+              <ul className="text-sm text-gray-400 space-y-1">
+                <li>• Orders are placed automatically at scheduled times</li>
+                <li>• Fresh menu data is fetched in real-time</li>
+                <li>• AI matches meals to your diet plan requirements</li>
+                <li>• You can customize which meals and days to order</li>
+                <li>• Orders are only placed on enabled days</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </main>
+
+      <BottomNav />
     </div>
   );
 }

@@ -35,16 +35,19 @@ model Session {
 }
 
 model User {
-  id            String            @id @default(cuid())
-  name          String?
-  email         String?           @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  profile       UserProfile?
-  integrations  UserIntegration[]
-  scheduledOrders ScheduledOrder[]
+  id               String              @id @default(cuid())
+  name             String?
+  email            String?             @unique
+  emailVerified    DateTime?
+  image            String?
+  accounts         Account[]
+  sessions         Session[]
+  profile          UserProfile?
+  integrations     UserIntegration[]
+  scheduledOrders  ScheduledOrder[]
+  dietPlans        DietPlan[]
+  autoOrderConfig  AutoOrderConfig?
+  scheduleOverrides ScheduleOverride[]
 }
 
 model UserProfile {
@@ -104,4 +107,63 @@ model ScheduledOrder {
 
   @@index([userId, status])
   @@index([scheduledTime, status])
+}
+
+model DietPlan {
+  id          String   @id @default(cuid())
+  userId      String
+  startDate   DateTime // The date when the plan starts
+  endDate     DateTime // The date when the plan ends
+  days        Int      // Number of days in the plan
+  plan        Json     // The complete diet plan data
+  notes       String?  // Strategy notes from AI
+  target      Json?    // Daily nutritional targets
+  isActive    Boolean  @default(true) // Only one active plan per user
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([startDate, endDate])
+}
+
+model AutoOrderConfig {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  enabled           Boolean  @default(false)
+  breakfastEnabled  Boolean  @default(true)
+  lunchEnabled      Boolean  @default(true)
+  dinnerEnabled     Boolean  @default(true)
+  breakfastTime     String   @default("07:30")
+  lunchTime         String   @default("12:30")
+  dinnerTime        String   @default("19:30")
+  mondayEnabled     Boolean  @default(true)
+  tuesdayEnabled    Boolean  @default(true)
+  wednesdayEnabled  Boolean  @default(true)
+  thursdayEnabled   Boolean  @default(true)
+  fridayEnabled     Boolean  @default(true)
+  saturdayEnabled   Boolean  @default(true)
+  sundayEnabled     Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
+}
+
+model ScheduleOverride {
+  id              String   @id @default(cuid())
+  userId          String
+  scheduledDate   DateTime // The exact date and time of the scheduled meal
+  mealType        String   // breakfast, lunch, dinner
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scheduledDate, mealType])
+  @@index([userId, scheduledDate])
 }

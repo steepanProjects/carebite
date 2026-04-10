@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
@@ -7,8 +8,8 @@ const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession();
-    
+    const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -25,8 +26,8 @@ export async function POST(req: Request) {
     // Fetch user with profile
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { 
-        profile: true 
+      include: {
+        profile: true
       }
     });
 
@@ -155,9 +156,44 @@ Days to plan: ${planDays.join(', ')}`;
       );
     }
 
+    // Calculate start and end dates
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0); // Start of today
+
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + days - 1); // End date is start + (days - 1)
+    endDate.setHours(23, 59, 59, 999); // End of the last day
+
+    // Deactivate any existing active plans for this user
+    await prisma.dietPlan.updateMany({
+      where: {
+        userId: user.id,
+        isActive: true
+      },
+      data: {
+        isActive: false
+      }
+    });
+
+    // Save the new diet plan to database
+    await prisma.dietPlan.create({
+      data: {
+        userId: user.id,
+        startDate: startDate,
+        endDate: endDate,
+        days: days,
+        plan: dietPlan,
+        notes: dietPlan.notes || null,
+        target: dietPlan.target || null,
+        isActive: true
+      }
+    });
+
     return NextResponse.json({
       success: true,
       dietPlan: dietPlan,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
       userProfile: {
         age: profile.age,
         height: profile.height,
@@ -170,6 +206,68 @@ Days to plan: ${planDays.join(', ')}`;
 
   } catch (error) {
     console.error("Error generating diet plan:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// GET endpoint to fetch active diet plan
+export async function GET(req: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      include: {
+        profile: true,
+        dietPlans: {
+          where: { isActive: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      }
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const activePlan = user.dietPlans[0];
+
+    if (!activePlan) {
+      return NextResponse.json({
+        success: false,
+        message: "No active diet plan found"
+      });
+    }
+
+    const profile = user.profile;
+    const bmi = profile ? (profile.weight! / Math.pow(profile.height! / 100, 2)).toFixed(1) : null;
+
+    return NextResponse.json({
+      success: true,
+      dietPlan: activePlan.plan,
+      startDate: activePlan.startDate,
+      endDate: activePlan.endDate,
+      days: activePlan.days,
+      userProfile: profile ? {
+        age: profile.age,
+        height: profile.height,
+        weight: profile.weight,
+        bmi: bmi ? parseFloat(bmi) : null,
+        fitnessGoal: profile.fitnessGoal,
+        activityType: profile.activityType
+      } : null
+    });
+
+  } catch (error) {
+    console.error("Error fetching diet plan:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

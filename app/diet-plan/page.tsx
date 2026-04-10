@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import BottomNav from "@/components/BottomNav";
 
 export default function DietPlanPage() {
   const { data: session, status } = useSession();
@@ -11,6 +12,8 @@ export default function DietPlanPage() {
   const [loading, setLoading] = useState(false);
   const [dietPlan, setDietPlan] = useState<any>(null);
   const [error, setError] = useState("");
+  const [showNewPlanModal, setShowNewPlanModal] = useState(false);
+  const [expandedDay, setExpandedDay] = useState<number>(1); // Initially expand day 1
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -24,6 +27,7 @@ export default function DietPlanPage() {
     setLoading(true);
     setError("");
     setDietPlan(null);
+    setShowNewPlanModal(false);
 
     try {
       const response = await fetch("/api/generate-diet", {
@@ -36,8 +40,6 @@ export default function DietPlanPage() {
 
       if (response.ok && result.success) {
         setDietPlan(result);
-        // Save to localStorage - will persist until next plan is generated
-        localStorage.setItem("current_diet_plan", JSON.stringify(result));
       } else {
         setError(result.error || "Failed to generate diet plan");
       }
@@ -49,13 +51,22 @@ export default function DietPlanPage() {
     }
   };
 
-  const loadSavedDietPlan = () => {
+  const handleDeleteAndNew = () => {
+    setDietPlan(null);
+    setShowNewPlanModal(true);
+    setDays(7); // Reset to default
+    setError("");
+  };
+
+  const loadSavedDietPlan = async () => {
     try {
-      const savedPlan = localStorage.getItem("current_diet_plan");
-      if (savedPlan) {
-        const plan = JSON.parse(savedPlan);
-        setDietPlan(plan);
-        setDays(plan.dietPlan?.dietPlan?.length || 7);
+      const response = await fetch("/api/generate-diet");
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.dietPlan) {
+          setDietPlan(data);
+          setDays(data.days || 7);
+        }
       }
     } catch (error) {
       console.error("Error loading saved diet plan:", error);
@@ -71,215 +82,299 @@ export default function DietPlanPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
+    <div className="min-h-screen bg-rich-black pb-24 md:pb-8">
+      <header className="bg-rich-black-50 shadow-sm border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push("/dashboard")}
-              className="text-gray-600 hover:text-gray-800"
+              className="text-gray-400 hover:text-white transition-colors"
             >
               ← Back
             </button>
             <div className="flex items-center gap-2">
-              <span className="text-2xl">🍽️</span>
-              <h1 className="text-xl font-bold text-gray-800">CareBite</h1>
+              <h1 className="text-xl font-bold text-white">Diet Plan</h1>
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow p-8 mb-6">
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">
-            Generate Your Personalized Diet Plan 🥗
-          </h2>
-          <p className="text-gray-600">
-            AI-powered meal planning based on your profile
-          </p>
-        </div>
-
         {!dietPlan ? (
-          <div className="bg-white rounded-lg shadow p-8">
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Number of Days
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="30"
-                value={days}
-                onChange={(e) => setDays(parseInt(e.target.value) || 1)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="Enter number of days (1-30)"
-              />
-            </div>
+          <div className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="bg-rich-black-50 rounded-2xl shadow border border-white/10 p-12 text-center max-w-md">
+              <div className="text-6xl mb-6">🥗</div>
+              <h2 className="text-2xl font-bold text-white mb-3">
+                No Diet Plan Yet
+              </h2>
+              <p className="text-gray-400 mb-8">
+                Generate your personalized diet plan to get started
+              </p>
 
-            {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-700">{error}</p>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-300 mb-3">
+                  Number of Days
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={days}
+                  onChange={(e) => setDays(parseInt(e.target.value) || 1)}
+                  className="w-full px-4 py-3 bg-rich-black border border-white/20 rounded-xl text-white focus:ring-2 focus:ring-white/30 focus:border-transparent transition-all"
+                  placeholder="Enter days (1-30)"
+                />
               </div>
-            )}
 
-            <button
-              onClick={handleGenerate}
-              disabled={loading}
-              className="w-full bg-emerald-500 text-white py-4 rounded-lg font-medium hover:bg-emerald-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-lg"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  Generating your personalized diet plan...
-                </span>
-              ) : (
-                "Generate Diet Plan"
+              {error && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                  <p className="text-red-400 text-sm">{error}</p>
+                </div>
               )}
-            </button>
 
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h3 className="font-semibold text-blue-900 mb-2">ℹ️ How it works:</h3>
-              <ul className="text-sm text-blue-800 space-y-1">
-                <li>• AI analyzes your profile (age, weight, height, BMI, goals, medical conditions)</li>
-                <li>• Creates nutritional requirements based on your fitness goals</li>
-                <li>• Provides food types, calories, and macronutrients (protein, carbs, fats)</li>
-                <li>• Considers activity type for optimal nutrition timing</li>
-                <li>• Respects medical conditions for safe recommendations</li>
-                <li>• Organizes by day with meal timings for easy planning</li>
-              </ul>
+              <button
+                onClick={handleGenerate}
+                disabled={loading}
+                className="w-full bg-white text-rich-black py-4 rounded-xl font-semibold hover:bg-gray-200 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all text-base"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-rich-black"></div>
+                    Generating...
+                  </span>
+                ) : (
+                  "Generate Diet Plan"
+                )}
+              </button>
             </div>
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Summary Card */}
-            <div className="bg-white rounded-lg shadow p-6">
+            {/* Header Card */}
+            <div className="bg-rich-black-50 rounded-2xl shadow border border-white/10 p-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="text-2xl font-bold text-gray-800 mb-2">
+                  <h3 className="text-2xl font-bold text-white">
                     Your {days}-Day Diet Plan
                   </h3>
-                  {dietPlan.dietPlan.notes && (
-                    <p className="text-gray-600 mt-2">
-                      <span className="font-semibold">Strategy:</span> {dietPlan.dietPlan.notes}
+                  {dietPlan.startDate && dietPlan.endDate && (
+                    <p className="text-sm text-gray-400 mt-1">
+                      {new Date(dietPlan.startDate).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })} - {new Date(dietPlan.endDate).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
                     </p>
                   )}
-                  {dietPlan.dietPlan.target && (
-                    <div className="mt-3 flex gap-4 text-sm">
-                      <span className="text-gray-700">
-                        <span className="font-semibold">Daily Target:</span> {dietPlan.dietPlan.target.cal} cal
-                      </span>
-                      <span className="text-gray-700">
-                        P: {dietPlan.dietPlan.target.p}g
-                      </span>
-                      <span className="text-gray-700">
-                        C: {dietPlan.dietPlan.target.c}g
-                      </span>
-                      <span className="text-gray-700">
-                        F: {dietPlan.dietPlan.target.f}g
-                      </span>
-                    </div>
-                  )}
-                  <p className="text-sm text-gray-500 mt-2">
-                    💾 This plan is saved and will be available until you generate a new one
-                  </p>
                 </div>
+              </div>
+
+              {dietPlan.dietPlan.notes && (
+                <p className="text-gray-400 text-sm mb-6">
+                  <span className="font-semibold text-white">Strategy:</span> {dietPlan.dietPlan.notes}
+                </p>
+              )}
+
+              <div className="flex justify-end">
                 <button
-                  onClick={() => {
-                    setDietPlan(null);
-                    localStorage.removeItem("current_diet_plan");
-                  }}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  onClick={handleDeleteAndNew}
+                  className="px-6 py-2.5 bg-white text-rich-black rounded-xl hover:bg-gray-200 transition-all font-semibold text-sm"
                 >
-                  Generate New Plan
+                  New Plan
                 </button>
               </div>
             </div>
 
-            {/* Compact Table View */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-emerald-600 text-white">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Day</th>
-                      <th className="px-4 py-3 text-left font-semibold">Breakfast</th>
-                      <th className="px-4 py-3 text-left font-semibold">Lunch</th>
-                      <th className="px-4 py-3 text-left font-semibold">Dinner</th>
-                      <th className="px-4 py-3 text-left font-semibold">Daily Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {(dietPlan.dietPlan?.plan || dietPlan.dietPlan?.dietPlan)?.map((dayPlan: any, index: number) => {
-                      // Handle new ultra-compact format
-                      const breakfast = dayPlan.b || dayPlan.breakfast;
-                      const lunch = dayPlan.l || dayPlan.lunch;
-                      const dinner = dayPlan.dn || dayPlan.dinner;
-                      const dayNum = dayPlan.d || dayPlan.dayNumber || index + 1;
-                      const dayName = dayPlan.day;
-                      const dayTotal = dayPlan.total || dayPlan.dayTotal;
-                      
-                      const renderMacros = (meal: any) => {
-                        if (!meal) return null;
-                        const cal = meal.cal || meal.total;
-                        const protein = meal.p;
-                        const carbs = meal.c;
-                        const fats = meal.f;
-                        const time = meal.t || meal.time;
-                        
-                        return (
-                          <div>
-                            {time && <div className="text-xs text-gray-500 mb-2 font-semibold">{time}</div>}
-                            <div className="space-y-1">
-                              <div className="text-sm font-semibold text-gray-800">{cal} calories</div>
-                              <div className="text-xs text-gray-600">Protein: {protein}g</div>
-                              <div className="text-xs text-gray-600">Carbs: {carbs}g</div>
-                              <div className="text-xs text-gray-600">Fats: {fats}g</div>
-                            </div>
-                          </div>
-                        );
-                      };
-                      
-                      return (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 font-semibold text-gray-800 whitespace-nowrap align-top">
-                            Day {dayNum}
-                            <div className="text-xs text-gray-500 font-normal">{dayName}</div>
-                          </td>
-                          <td className="px-4 py-3 align-top">
-                            {renderMacros(breakfast)}
-                          </td>
-                          <td className="px-4 py-3 align-top">
-                            {renderMacros(lunch)}
-                          </td>
-                          <td className="px-4 py-3 align-top">
-                            {renderMacros(dinner)}
-                          </td>
-                          <td className="px-4 py-3 align-top">
-                            <div className="text-lg font-bold text-emerald-600">
-                              {dayTotal} cal
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            {/* New Plan Modal */}
+            {showNewPlanModal && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-rich-black-50 rounded-2xl shadow-2xl border border-white/20 p-8 max-w-md w-full">
+                  <h3 className="text-2xl font-bold text-white mb-2">Generate New Plan</h3>
+                  <p className="text-gray-400 mb-6 text-sm">
+                    This will delete your current plan and create a new one
+                  </p>
 
-            {/* Order Placement Info */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-semibold text-blue-900 mb-2">📋 Nutritional Targets Saved</h4>
-              <p className="text-sm text-blue-800 mb-2">
-                Your personalized macronutrient targets are saved in cache memory for each meal.
-              </p>
-              <p className="text-sm text-blue-800">
-                This plan will remain available until you generate a new one.
-              </p>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-300 mb-3">
+                      Number of Days
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={days}
+                      onChange={(e) => setDays(parseInt(e.target.value) || 1)}
+                      className="w-full px-4 py-3 bg-rich-black border border-white/20 rounded-xl text-white focus:ring-2 focus:ring-white/30 focus:border-transparent transition-all"
+                      placeholder="Enter days (1-30)"
+                    />
+                  </div>
+
+                  {error && (
+                    <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                      <p className="text-red-400 text-sm">{error}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowNewPlanModal(false);
+                        setError("");
+                        // Restore the plan
+                        loadSavedDietPlan();
+                      }}
+                      className="flex-1 px-4 py-3 bg-white/10 border border-white/20 text-white rounded-xl hover:bg-white/20 transition-all font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleGenerate}
+                      disabled={loading}
+                      className="flex-1 px-4 py-3 bg-white text-rich-black rounded-xl font-semibold hover:bg-gray-200 disabled:bg-gray-600 disabled:text-white disabled:cursor-not-allowed transition-all"
+                    >
+                      {loading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-rich-black"></div>
+                          Generating...
+                        </span>
+                      ) : (
+                        "Generate"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Day Cards */}
+            <div className="grid grid-cols-1 gap-4">
+              {(dietPlan.dietPlan?.plan || dietPlan.dietPlan?.dietPlan)?.map((dayPlan: any, index: number) => {
+                const breakfast = dayPlan.b || dayPlan.breakfast;
+                const lunch = dayPlan.l || dayPlan.lunch;
+                const dinner = dayPlan.dn || dayPlan.dinner;
+                const dayNum = dayPlan.d || dayPlan.dayNumber || index + 1;
+                const dayTotal = dayPlan.total || dayPlan.dayTotal;
+
+                // Calculate the actual date for this day
+                const dayDate = dietPlan.startDate
+                  ? new Date(new Date(dietPlan.startDate).getTime() + (index * 24 * 60 * 60 * 1000))
+                  : null;
+
+                // Get the actual day name from the date
+                const actualDayName = dayDate
+                  ? dayDate.toLocaleDateString('en-US', { weekday: 'long' })
+                  : dayPlan.day;
+
+                const renderMeal = (meal: any, mealName: string, icon: string) => {
+                  if (!meal) return null;
+                  const cal = meal.cal || meal.total;
+                  const protein = meal.p;
+                  const carbs = meal.c;
+                  const fats = meal.f;
+                  const time = meal.t || meal.time;
+
+                  return (
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">{icon}</span>
+                          <div>
+                            <h4 className="text-white font-semibold">{mealName}</h4>
+                            {time && <p className="text-xs text-gray-500">{time}</p>}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-white">{cal}</div>
+                          <div className="text-xs text-gray-400">calories</div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-white/5 rounded-lg p-2 text-center">
+                          <div className="text-xs text-gray-400">Protein</div>
+                          <div className="text-sm font-semibold text-white">{protein}g</div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-2 text-center">
+                          <div className="text-xs text-gray-400">Carbs</div>
+                          <div className="text-sm font-semibold text-white">{carbs}g</div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-2 text-center">
+                          <div className="text-xs text-gray-400">Fats</div>
+                          <div className="text-sm font-semibold text-white">{fats}g</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                };
+
+                const isExpanded = expandedDay === dayNum;
+
+                return (
+                  <div
+                    key={index}
+                    className="bg-rich-black-50 rounded-2xl shadow border border-white/10 hover:border-white/20 transition-all overflow-hidden"
+                  >
+                    <button
+                      onClick={() => setExpandedDay(isExpanded ? 0 : dayNum)}
+                      className="w-full p-6 text-left flex items-center justify-between hover:bg-white/5 transition-colors"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <h3 className="text-xl font-bold text-white">Day {dayNum}</h3>
+                          <p className="text-sm text-gray-400">{actualDayName}</p>
+                          {dayDate && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {dayDate.toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2">
+                          <div className="text-xs text-gray-400">Total</div>
+                          <div className="text-lg font-bold text-white">{dayTotal} cal</div>
+                        </div>
+                        <svg
+                          className={`w-6 h-6 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''
+                            }`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="px-6 pb-6 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                        {renderMeal(breakfast, "Breakfast", "🌅")}
+                        {renderMeal(lunch, "Lunch", "☀️")}
+                        {renderMeal(dinner, "Dinner", "🌙")}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
       </main>
+
+      {/* Floating Bottom Navigation */}
+      <BottomNav />
     </div>
   );
 }

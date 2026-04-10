@@ -185,7 +185,7 @@ export default function LoginPage() {
             <Image src="/image.png" alt="logo" width={32} height={32} className="object-contain" />
           </div>
           <span className="text-white font-bold text-[17px] tracking-tight drop-shadow-sm">
-            Care<span className="text-emerald-400">Bite</span>
+            Care<span className="text-white">Bite</span>
           </span>
         </motion.div>
 
@@ -197,7 +197,7 @@ export default function LoginPage() {
           animate="animate"
         >
           <motion.p
-            className="text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-400 mb-2.5"
+            className="text-[10px] font-bold uppercase tracking-[0.25em] text-white mb-2.5"
             variants={leftLine}
           >
             Nutrition Intelligence
@@ -240,7 +240,7 @@ export default function LoginPage() {
           RIGHT — login panel
           flex-1 on mobile fills full width; md:w-1/2 on desktop
       ══════════════════════════════════════════════════ */}
-      <div className="relative flex flex-1 md:w-1/2 md:flex-none h-full items-center justify-center overflow-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="relative flex flex-1 md:w-1/2 md:flex-none h-full items-center justify-center overflow-hidden bg-gradient-to-br from-rich-black-100 via-rich-black to-rich-black-100">
 
         {/* noise grain */}
         <div
@@ -255,17 +255,17 @@ export default function LoginPage() {
         {/* ambient blobs */}
         <Blob
           className="absolute -top-28 -left-20 w-80 h-80 rounded-full blur-3xl pointer-events-none"
-          style={{ background: "radial-gradient(circle, #059669 0%, #064e3b 70%)" }}
+          style={{ background: "radial-gradient(circle, #FFFFFF 0%, #A3A3A3 70%)" }}
           delay={0}
         />
         <Blob
           className="absolute -bottom-32 -right-20 w-96 h-96 rounded-full blur-3xl pointer-events-none"
-          style={{ background: "radial-gradient(circle, #111827 0%, #0f172a 70%)" }}
+          style={{ background: "radial-gradient(circle, #1A1A1A 0%, #0A0A0A 70%)" }}
           delay={3.5}
         />
         <Blob
           className="absolute top-1/2 -right-10 w-52 h-52 rounded-full blur-2xl pointer-events-none"
-          style={{ background: "radial-gradient(circle, #065f46 0%, #022c22 70%)" }}
+          style={{ background: "radial-gradient(circle, #E5E5E5 0%, #525252 70%)" }}
           delay={6.5}
         />
 
@@ -273,7 +273,7 @@ export default function LoginPage() {
         <div
           className="absolute z-0 pointer-events-none w-[400px] h-[500px]"
           style={{
-            background: "radial-gradient(ellipse at 50% 50%, rgba(16,185,129,0.18) 0%, transparent 68%)",
+            background: "radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.18) 0%, transparent 68%)",
             filter: "blur(40px)",
           }}
         />
@@ -283,7 +283,7 @@ export default function LoginPage() {
           className="relative z-10 w-full max-w-[360px] mx-auto px-8 py-9 rounded-3xl border border-white/[0.13] bg-white/[0.07] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1"
           style={{
             boxShadow:
-              "0 0 0 1px rgba(255,255,255,0.06), 0 32px 64px -10px rgba(0,0,0,0.7), 0 0 60px rgba(16,185,129,0.12), inset 0 1px 0 rgba(255,255,255,0.09)",
+              "0 0 0 1px rgba(255,255,255,0.06), 0 32px 64px -10px rgba(0,0,0,0.7), 0 0 60px rgba(255,255,255,0.12), inset 0 1px 0 rgba(255,255,255,0.09)",
           }}
           initial={cardV.initial}
           animate={cardV.animate}
@@ -300,7 +300,7 @@ export default function LoginPage() {
             <motion.div
               className="w-[70px] h-[70px] rounded-2xl overflow-hidden flex items-center justify-center border border-white/20 bg-white/5"
               style={{
-                boxShadow: "0 0 40px rgba(16,185,129,0.3), 0 8px 28px rgba(0,0,0,0.5)",
+                boxShadow: "0 0 40px rgba(255,255,255,0.3), 0 8px 28px rgba(0,0,0,0.5)",
               }}
               animate={{ y: [0, -7, 0] }}
               transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }}
@@ -324,7 +324,7 @@ export default function LoginPage() {
             >
               <h1 className="text-[27px] font-extrabold tracking-tight leading-none">
                 <span className="text-white">Care</span>
-                <span className="text-emerald-400">Bite</span>
+                <span className="text-white">Bite</span>
               </h1>
               <p className="text-[13px] text-gray-400 mt-2 font-medium tracking-wide">
                 Smart nutrition for better care
@@ -358,7 +358,7 @@ export default function LoginPage() {
               className="w-full relative flex items-center justify-center gap-3 bg-white/[0.08] border border-white/[0.18] text-white font-semibold py-3.5 px-5 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
               whileHover={{
                 scale: 1.03,
-                boxShadow: "0 0 36px rgba(16,185,129,0.35), 0 8px 28px rgba(0,0,0,0.4)",
+                boxShadow: "0 0 36px rgba(255,255,255,0.35), 0 8px 28px rgba(0,0,0,0.4)",
               }}
               whileTap={{ scale: 0.97 }}
               transition={{ type: "spring", stiffness: 420, damping: 22 }}
@@ -386,7 +386,7 @@ export default function LoginPage() {
                     transition={{ duration: 0.15 }}
                   >
                     <svg
-                      className="w-5 h-5 animate-spin text-emerald-400"
+                      className="w-5 h-5 animate-spin text-white"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
                       viewBox="0 0 24 24"
@@ -423,9 +423,9 @@ export default function LoginPage() {
             {features.map((feat) => (
               <motion.span
                 key={feat}
-                className="text-[11px] text-emerald-400 border border-emerald-500/25 bg-emerald-500/[0.08] rounded-full px-3 py-[5px] font-medium tracking-wide cursor-default select-none"
+                className="text-[11px] text-white border border-white/25 bg-white/[0.08] rounded-full px-3 py-[5px] font-medium tracking-wide cursor-default select-none"
                 variants={chipV}
-                whileHover={{ scale: 1.08, y: -2, borderColor: "rgba(52,211,153,0.55)" }}
+                whileHover={{ scale: 1.08, y: -2, borderColor: "rgba(255,255,255,0.55)" }}
                 transition={{ type: "spring", stiffness: 360, damping: 18 }}
               >
                 {feat}
@@ -441,11 +441,11 @@ export default function LoginPage() {
             transition={footV.transition}
           >
             By continuing, you agree to our{" "}
-            <span className="text-emerald-500 hover:text-emerald-400 cursor-pointer transition-colors duration-200">
+            <span className="text-white hover:text-gray-300 cursor-pointer transition-colors duration-200">
               Terms of Service
             </span>{" "}
             and{" "}
-            <span className="text-emerald-500 hover:text-emerald-400 cursor-pointer transition-colors duration-200">
+            <span className="text-white hover:text-gray-300 cursor-pointer transition-colors duration-200">
               Privacy Policy
             </span>
           </motion.p>

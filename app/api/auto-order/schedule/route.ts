@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -12,13 +13,13 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     console.log("Received body:", JSON.stringify(body, null, 2));
-    
+
     const { dietPlan, startDate } = body;
 
     if (!dietPlan) {
       console.error("Diet plan is missing from request");
       return NextResponse.json(
-        { 
+        {
           error: "Diet plan is required",
           received: Object.keys(body)
         },
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
     if (!dietPlan.plan || !Array.isArray(dietPlan.plan)) {
       console.error("Diet plan structure is invalid:", dietPlan);
       return NextResponse.json(
-        { 
+        {
           error: "Invalid diet plan structure. Expected { plan: [...] }",
           received: dietPlan
         },
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
 // GET endpoint to retrieve scheduled orders and their status
 export async function GET(req: Request) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -110,7 +111,7 @@ export async function GET(req: Request) {
     }
 
     const scheduledOrders = await (prisma as any).scheduledOrder.findMany({
-      where: { 
+      where: {
         userId: user.id,
         mealType: { not: "config" } // Exclude config record
       },

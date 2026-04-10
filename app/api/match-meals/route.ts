@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession();
-    
+    const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
       canteenId?: string;
       canteenName?: string;
     }> = [];
-    
+
     if (Array.isArray(menuItems)) {
       structuredItems = menuItems.map((item: any) => {
         const name = item.name || item.dishName || item.title || item.dish_name || String(item);
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
         const canteenId = item.canteenId || item.canteen_id || item.restaurantId || item.restaurant_id;
         const canteenName = item.canteenName || item.canteen_name || item.restaurantName || item.restaurant_name;
         const id = item.id || item._id || item.menuItemId || item.menu_item_id;
-        
+
         return { id, name, platform, canteenId, canteenName };
       }).filter((item) => item.name && item.id);
     }
@@ -163,23 +164,23 @@ Return ONLY JSON:
     if (!response.ok) {
       const errorData = await response.json();
       console.error("Groq API error:", errorData);
-      
+
       // Check if it's a rate limit error
       if (errorData.error?.code === 'rate_limit_exceeded') {
         const errorMsg = errorData.error.message;
         // Extract wait time if available
         const waitTimeMatch = errorMsg.match(/try again in ([\d.]+[smh]+)/);
         const waitTime = waitTimeMatch ? waitTimeMatch[1] : 'some time';
-        
+
         return NextResponse.json(
-          { 
+          {
             error: `Rate limit reached. Please try again in ${waitTime}.`,
             details: errorMsg
           },
           { status: 429 }
         );
       }
-      
+
       return NextResponse.json(
         { error: "Failed to match meals" },
         { status: response.status }
@@ -201,7 +202,7 @@ Return ONLY JSON:
     try {
       const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       matchResult = JSON.parse(cleanContent);
-      
+
       // Post-process: Clean up canteenId if it has prefixes
       if (matchResult.items && Array.isArray(matchResult.items)) {
         matchResult.items = matchResult.items.map((item: any) => {
@@ -216,7 +217,7 @@ Return ONLY JSON:
           return item;
         });
       }
-      
+
       console.log("Matched items with cleaned IDs:", matchResult.items?.map((item: any) => ({
         menuItemId: item.menuItemId,
         itemName: item.itemName,

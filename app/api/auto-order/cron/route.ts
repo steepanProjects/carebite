@@ -3,75 +3,59 @@ import { prisma } from "@/lib/prisma";
 import { getUserIntegrations } from "@/lib/integration";
 import { PLATFORMS, Platform } from "@/lib/platforms";
 
-// This endpoint is called by Vercel Cron every 10 minutes
-// Vercel Cron automatically authenticates requests, no manual auth needed
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
+// In-memory cache for menu data (expires after 10 minutes)
+const menuCache = new Map<string, { data: any[]; timestamp: number }>();
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
+// This endpoint is called by Vercel Cron every 10 minutes
 export async function GET(req: Request) {
   try {
-    // For Vercel Cron: Check if request is from Vercel
-    // Vercel adds special headers to cron requests
+    // Verify cron authentication
     const authHeader = req.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
-    
-    // Allow requests from Vercel Cron (no auth header) or with valid secret
     const isVercelCron = req.headers.get("user-agent")?.includes("vercel");
     const isValidSecret = authHeader === `Bearer ${cronSecret}`;
-    
+
     if (!isVercelCron && !isValidSecret) {
       console.log("Unauthorized cron request");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    console.log("=== CRON JOB: Checking scheduled orders ===");
+    console.log("=== CRON JOB: Starting auto-order check ===");
 
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(
       now.getMinutes()
     ).padStart(2, "0")}`;
-    
-    // Get current day of the diet plan (you might want to track this differently)
-    // For now, we'll check all pending orders that match the current time window (±15 minutes)
-    
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    
-    // Define time windows (±15 minutes)
-    const timeWindows = [
-      { name: "breakfast", hour: 7, minute: 30 },
-      { name: "lunch", hour: 12, minute: 30 },
-      { name: "dinner", hour: 19, minute: 30 },
+    const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const dayNames = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
     ];
-    
-    let activeWindow = null;
-    for (const window of timeWindows) {
-      const timeDiff = Math.abs(
-        (currentHour * 60 + currentMinute) - (window.hour * 60 + window.minute)
-      );
-      if (timeDiff <= 15) {
-        activeWindow = window.name;
-        break;
-      }
-    }
-    
-    if (!activeWindow) {
-      console.log("No active time window");
-      return NextResponse.json({
-        success: true,
-        message: "No active time window",
-        currentTime,
-      });
-    }
+    const currentDayName = dayNames[dayOfWeek];
 
-    console.log(`Active window: ${activeWindow} at ${currentTime}`);
+    console.log(`Current time: ${currentTime}, Day: ${currentDayName}`);
 
-    // Get all users with automated ordering enabled
-    const configs = await (prisma as any).scheduledOrder.findMany({
+    // Get all users with auto-ordering enabled
+    const configs = await (prisma as any).autoOrderConfig.findMany({
       where: {
-        mealType: "config",
-        status: "scheduled",
+        enabled: true,
       },
       include: {
-        user: true,
+        user: {
+          include: {
+            integrations: true,
+          },
+        },
       },
     });
 
@@ -81,24 +65,101 @@ export async function GET(req: Request) {
 
     for (const config of configs) {
       try {
-        const dietPlan = config.requirements.dietPlan;
-        const startDate = new Date(config.requirements.startDate);
-        const today = new Date();
-        
-        // Calculate which day of the diet plan we're on
-        const daysDiff = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-        const currentDayIndex = daysDiff % dietPlan.plan.length; // Loop through the plan
-        const currentDay = dietPlan.plan[currentDayIndex];
-        
-        console.log(`User: ${config.user.email}, Diet Day: ${currentDay.d} (${currentDay.day}), Meal: ${activeWindow}`);
+        // Check if today is enabled for this user
+        const dayEnabledKey = `${currentDayName}Enabled`;
+        if (!config[dayEnabledKey]) {
+          console.log(`${config.user.email}: ${currentDayName} is disabled, skipping`);
+          continue;
+        }
 
-        // Check if this meal has already been ordered today
-        const todayStart = new Date(today.setHours(0, 0, 0, 0));
+        // Determine which meal to order based on current time (±15 minute window)
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const currentTotalMinutes = currentHour * 60 + currentMinute;
+
+        let mealType: string | null = null;
+        let mealTime: string | null = null;
+
+        // Check breakfast
+        if (config.breakfastEnabled) {
+          const [bHour, bMin] = config.breakfastTime.split(":").map(Number);
+          const bTotalMinutes = bHour * 60 + bMin;
+          if (Math.abs(currentTotalMinutes - bTotalMinutes) <= 15) {
+            mealType = "breakfast";
+            mealTime = config.breakfastTime;
+          }
+        }
+
+        // Check lunch
+        if (!mealType && config.lunchEnabled) {
+          const [lHour, lMin] = config.lunchTime.split(":").map(Number);
+          const lTotalMinutes = lHour * 60 + lMin;
+          if (Math.abs(currentTotalMinutes - lTotalMinutes) <= 15) {
+            mealType = "lunch";
+            mealTime = config.lunchTime;
+          }
+        }
+
+        // Check dinner
+        if (!mealType && config.dinnerEnabled) {
+          const [dHour, dMin] = config.dinnerTime.split(":").map(Number);
+          const dTotalMinutes = dHour * 60 + dMin;
+          if (Math.abs(currentTotalMinutes - dTotalMinutes) <= 15) {
+            mealType = "dinner";
+            mealTime = config.dinnerTime;
+          }
+        }
+
+        if (!mealType) {
+          console.log(`${config.user.email}: No active meal window`);
+          continue;
+        }
+
+        console.log(`${config.user.email}: Processing ${mealType} order`);
+
+        // Get active diet plan
+        const dietPlan = await (prisma as any).dietPlan.findFirst({
+          where: {
+            userId: config.userId,
+            isActive: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
+
+        if (!dietPlan) {
+          console.log(`${config.user.email}: No active diet plan`);
+          continue;
+        }
+
+        // Calculate current diet day
+        const daysDiff = Math.floor(
+          (now.getTime() - new Date(dietPlan.startDate).getTime()) /
+          (1000 * 60 * 60 * 24)
+        );
+        const dietDayIndex = daysDiff % dietPlan.days;
+
+        // Handle different diet plan structures
+        const planArray = dietPlan.plan?.plan || dietPlan.plan;
+        if (!planArray || !Array.isArray(planArray) || planArray.length === 0) {
+          console.log(`${config.user.email}: Invalid diet plan structure`);
+          continue;
+        }
+
+        const currentDay = planArray[dietDayIndex];
+        if (!currentDay) {
+          console.log(`${config.user.email}: Diet day not found for index ${dietDayIndex}`);
+          continue;
+        }
+
+        // Check if already ordered today
+        const todayStart = new Date(now.setHours(0, 0, 0, 0));
         const existingOrder = await (prisma as any).scheduledOrder.findFirst({
           where: {
             userId: config.userId,
-            day: currentDay.d,
-            mealType: activeWindow,
+            day: currentDay.d || dietDayIndex + 1,
+            mealType: mealType,
             executedAt: {
               gte: todayStart,
             },
@@ -106,78 +167,116 @@ export async function GET(req: Request) {
         });
 
         if (existingOrder) {
-          console.log(`Meal already ordered today: ${existingOrder.orderNumber || existingOrder.status}`);
+          console.log(
+            `${config.user.email}: ${mealType} already ordered today (${existingOrder.orderNumber || existingOrder.status})`
+          );
           continue;
         }
 
-        // Get meal requirements for this meal type
-        let mealRequirements;
-        if (activeWindow === "breakfast") {
-          mealRequirements = { ...currentDay.b, mealType: "Breakfast" };
-        } else if (activeWindow === "lunch") {
-          mealRequirements = { ...currentDay.l, mealType: "Lunch" };
-        } else if (activeWindow === "dinner") {
-          mealRequirements = { ...currentDay.dn, mealType: "Dinner" };
-        }
+        // Check for schedule override
+        const [mealHour, mealMinute] = (mealType === "breakfast" ? config.breakfastTime :
+          mealType === "lunch" ? config.lunchTime :
+            config.dinnerTime).split(":").map(Number);
+        const scheduledDateTime = new Date(now);
+        scheduledDateTime.setHours(mealHour, mealMinute, 0, 0);
 
-        console.log(`Processing order for ${activeWindow}: Cal ${mealRequirements.cal}`);
-
-        // Get user integrations
-        const integrations = await getUserIntegrations(config.userId);
-        const profile: any = await (prisma as any).userProfile.findUnique({
-          where: { userId: config.userId },
+        const override = await (prisma as any).scheduleOverride.findUnique({
+          where: {
+            userId_scheduledDate_mealType: {
+              userId: config.userId,
+              scheduledDate: scheduledDateTime,
+              mealType: mealType,
+            },
+          },
         });
 
-        // Fetch fresh menu data
-        const allMenuItems: any[] = [];
-        const platforms: Platform[] = ["sillobite", "figgy", "komato"];
+        if (override && !override.enabled) {
+          console.log(`${config.user.email}: ${mealType} is disabled by user override`);
+          continue;
+        }
 
-        for (const platform of platforms) {
-          const integration = integrations.find((i: any) => i.platform === platform);
+        // Get meal requirements
+        let mealRequirements;
+        if (mealType === "breakfast") {
+          mealRequirements = { ...(currentDay.b || currentDay.breakfast), mealType: "Breakfast" };
+        } else if (mealType === "lunch") {
+          mealRequirements = { ...(currentDay.l || currentDay.lunch), mealType: "Lunch" };
+        } else if (mealType === "dinner") {
+          mealRequirements = { ...(currentDay.dn || currentDay.dinner), mealType: "Dinner" };
+        }
 
-          if (integration?.accessToken) {
-            try {
-              const platformConfig = PLATFORMS[platform];
-              const response = await fetch(
-                `${platformConfig.apiUrl}/api/carebite/menu`,
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    email: config.user.email,
-                    accessToken: integration.accessToken,
-                  }),
-                }
-              );
+        console.log(`${config.user.email}: Meal requirements - Cal: ${mealRequirements.cal}`);
 
-              if (response.ok) {
-                const menuData = await response.json();
-                let items: any[] = [];
+        // Fetch menu data (with caching)
+        const cacheKey = `menu_${config.userId}`;
+        let allMenuItems: any[] = [];
 
-                if (Array.isArray(menuData)) {
-                  items = menuData;
-                } else if (menuData.data && Array.isArray(menuData.data)) {
-                  items = menuData.data;
-                } else if (typeof menuData === "object") {
-                  const possibleArrays = ["dishes", "items", "menu", "menuItems"];
-                  for (const key of possibleArrays) {
-                    if (Array.isArray(menuData[key])) {
-                      items = menuData[key];
-                      break;
+        const cached = menuCache.get(cacheKey);
+        if (cached && now.getTime() - cached.timestamp < CACHE_DURATION) {
+          console.log(`${config.user.email}: Using cached menu data`);
+          allMenuItems = cached.data;
+        } else {
+          console.log(`${config.user.email}: Fetching fresh menu data`);
+          const platforms: Platform[] = ["sillobite", "figgy", "komato"];
+
+          for (const platform of platforms) {
+            const integration = config.user.integrations.find(
+              (i: any) => i.platform === platform
+            );
+
+            if (integration?.accessToken) {
+              try {
+                const platformConfig = PLATFORMS[platform];
+                const response = await fetch(
+                  `${platformConfig.apiUrl}/api/carebite/menu`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      email: config.user.email,
+                      accessToken: integration.accessToken,
+                    }),
+                  }
+                );
+
+                if (response.ok) {
+                  const menuData = await response.json();
+                  let items: any[] = [];
+
+                  if (Array.isArray(menuData)) {
+                    items = menuData;
+                  } else if (menuData.data && Array.isArray(menuData.data)) {
+                    items = menuData.data;
+                  } else if (typeof menuData === "object") {
+                    const possibleArrays = ["dishes", "items", "menu", "menuItems"];
+                    for (const key of possibleArrays) {
+                      if (Array.isArray(menuData[key])) {
+                        items = menuData[key];
+                        break;
+                      }
                     }
                   }
+
+                  items = items.map((item) => ({
+                    ...item,
+                    platform: item.platform || platform,
+                  }));
+
+                  allMenuItems.push(...items);
+                  console.log(`${config.user.email}: Fetched ${items.length} items from ${platform}`);
                 }
-
-                items = items.map((item) => ({
-                  ...item,
-                  platform: item.platform || platform,
-                }));
-
-                allMenuItems.push(...items);
+              } catch (error) {
+                console.error(`${config.user.email}: Error fetching menu from ${platform}:`, error);
               }
-            } catch (error) {
-              console.error(`Error fetching menu from ${platform}:`, error);
             }
+          }
+
+          // Cache the menu data
+          if (allMenuItems.length > 0) {
+            menuCache.set(cacheKey, {
+              data: allMenuItems,
+              timestamp: now.getTime(),
+            });
           }
         }
 
@@ -185,21 +284,33 @@ export async function GET(req: Request) {
           const failedOrder = await (prisma as any).scheduledOrder.create({
             data: {
               userId: config.userId,
-              day: currentDay.d,
-              dayName: currentDay.day,
-              mealType: activeWindow,
-              scheduledTime: activeWindow === "breakfast" ? "07:30" : activeWindow === "lunch" ? "12:30" : "19:30",
+              day: currentDay.d || dietDayIndex + 1,
+              dayName: currentDay.day || dayNames[dayOfWeek],
+              mealType: mealType,
+              scheduledTime: mealTime,
               requirements: mealRequirements,
               status: "failed",
               error: "No menu items available",
               executedAt: new Date(),
             },
           });
-          results.push({ orderId: failedOrder.id, status: "failed", error: "No menu items" });
+          results.push({
+            user: config.user.email,
+            orderId: failedOrder.id,
+            status: "failed",
+            error: "No menu items",
+          });
           continue;
         }
 
-        // Match meals
+        console.log(`${config.user.email}: Total menu items: ${allMenuItems.length}`);
+
+        // Get user profile
+        const profile = await (prisma as any).userProfile.findUnique({
+          where: { userId: config.userId },
+        });
+
+        // Match meals using AI
         const matchResponse = await fetch(
           `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/match-meals`,
           {
@@ -219,17 +330,22 @@ export async function GET(req: Request) {
           const failedOrder = await (prisma as any).scheduledOrder.create({
             data: {
               userId: config.userId,
-              day: currentDay.d,
-              dayName: currentDay.day,
-              mealType: activeWindow,
-              scheduledTime: activeWindow === "breakfast" ? "07:30" : activeWindow === "lunch" ? "12:30" : "19:30",
+              day: currentDay.d || dietDayIndex + 1,
+              dayName: currentDay.day || dayNames[dayOfWeek],
+              mealType: mealType,
+              scheduledTime: mealTime,
               requirements: mealRequirements,
               status: "failed",
               error: matchResult.error || "Failed to match meals",
               executedAt: new Date(),
             },
           });
-          results.push({ orderId: failedOrder.id, status: "failed", error: matchResult.error });
+          results.push({
+            user: config.user.email,
+            orderId: failedOrder.id,
+            status: "failed",
+            error: matchResult.error,
+          });
           continue;
         }
 
@@ -243,6 +359,8 @@ export async function GET(req: Request) {
           itemName: item.itemName,
           quantity: item.quantity || 1,
         }));
+
+        console.log(`${config.user.email}: Placing order on ${platform}`);
 
         // Place order
         const orderResponse = await fetch(
@@ -264,10 +382,10 @@ export async function GET(req: Request) {
           const successOrder = await (prisma as any).scheduledOrder.create({
             data: {
               userId: config.userId,
-              day: currentDay.d,
-              dayName: currentDay.day,
-              mealType: activeWindow,
-              scheduledTime: activeWindow === "breakfast" ? "07:30" : activeWindow === "lunch" ? "12:30" : "19:30",
+              day: currentDay.d || dietDayIndex + 1,
+              dayName: currentDay.day || dayNames[dayOfWeek],
+              mealType: mealType,
+              scheduledTime: mealTime,
               requirements: mealRequirements,
               status: "ordered",
               orderId: orderResult.order.id,
@@ -277,44 +395,37 @@ export async function GET(req: Request) {
             },
           });
           results.push({
+            user: config.user.email,
             orderId: successOrder.id,
             status: "ordered",
             orderNumber: orderResult.order.orderNumber,
           });
-          console.log(`✓ Order placed: ${orderResult.order.orderNumber}`);
+          console.log(`✓ ${config.user.email}: Order placed - ${orderResult.order.orderNumber}`);
         } else {
           const failedOrder = await (prisma as any).scheduledOrder.create({
             data: {
               userId: config.userId,
-              day: currentDay.d,
-              dayName: currentDay.day,
-              mealType: activeWindow,
-              scheduledTime: activeWindow === "breakfast" ? "07:30" : activeWindow === "lunch" ? "12:30" : "19:30",
+              day: currentDay.d || dietDayIndex + 1,
+              dayName: currentDay.day || dayNames[dayOfWeek],
+              mealType: mealType,
+              scheduledTime: mealTime,
               requirements: mealRequirements,
               status: "failed",
               error: orderResult.error || "Failed to place order",
               executedAt: new Date(),
             },
           });
-          results.push({ orderId: failedOrder.id, status: "failed", error: orderResult.error });
+          results.push({
+            user: config.user.email,
+            orderId: failedOrder.id,
+            status: "failed",
+            error: orderResult.error,
+          });
         }
       } catch (error) {
         console.error(`Error processing order for user ${config.user.email}:`, error);
-        const failedOrder = await (prisma as any).scheduledOrder.create({
-          data: {
-            userId: config.userId,
-            day: 0,
-            dayName: "Error",
-            mealType: activeWindow,
-            scheduledTime: activeWindow === "breakfast" ? "07:30" : activeWindow === "lunch" ? "12:30" : "19:30",
-            requirements: {},
-            status: "failed",
-            error: error instanceof Error ? error.message : "Unknown error",
-            executedAt: new Date(),
-          },
-        });
         results.push({
-          orderId: failedOrder.id,
+          user: config.user.email,
           status: "failed",
           error: error instanceof Error ? error.message : "Unknown error",
         });
@@ -326,7 +437,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       currentTime,
-      activeWindow,
+      currentDay: currentDayName,
       processed: results.length,
       results,
     });
