@@ -85,23 +85,8 @@ CareBite automates the entire process:
 
 ---
 
-## 🎬 Demo
-
-### Screenshots
-
-<div align="center">
-  <img src="docs/screenshots/splash.png" alt="Splash Screen" width="200" />
-  <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="200" />
-  <img src="docs/screenshots/diet-plan.png" alt="Diet Plan" width="200" />
-  <img src="docs/screenshots/auto-orders.png" alt="Auto Orders" width="200" />
-</div>
-
 ### Live Demo
-🌐 **[Try CareBite Live](https://carebite.vercel.app)** *(Coming Soon)*
-
-### Video Walkthrough
-📹 **[Watch Demo Video](https://youtube.com/...)** *(Coming Soon)*
-
+🌐 **[Try CareBite Live](https://care-bites.vercel.app/)**
 ---
 
 ## 🛠️ Tech Stack
@@ -150,7 +135,7 @@ CareBite automates the entire process:
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/carebite.git
+git clone https://github.com/steepanProjects/carebite
 cd carebite
 ```
 
